@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="script-src 'self';">
+  <title>NextToWatch - İzleme Listenizi Takip Edin</title>
+  <link rel="stylesheet" href="src/css/styles.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Başlık ve Arama Bölümü -->
+    <header class="header">
+      <div class="logo">LOGO</div>
+      <div class="search-bar">
+        <input type="text" placeholder="Arama çubuğu">
+      </div>
+      <button class="add-button">Yeni ekle butonu</button>
+    </header>
+
+    <!-- Navigasyon Çubuğu -->
+    <nav class="navbar">
+      <div class="navbar-item active">Anasayfa</div>
+      <div class="navbar-item">Film</div>
+      <div class="navbar-item">Dizi</div>
+      <div class="navbar-item">Anime</div>
+      <div class="navbar-item">İzleme Listem</div>
+      <div class="navbar-item">Ayarlar</div>
+    </nav>
+
+    <!-- Ana İçerik -->
+    <main class="main-content">
+      <!-- Film Kategorisi -->
+      <div class="category">
+        <h2 class="category-title">Film</h2>
+
+        <!-- İzleniyor Bölümü -->
+        <div class="content-section">
+          <h3 class="section-title">İzleniyor</h3>
+          <div class="content-slider">
+            <div class="slider-content">
+              <div class="content-card">içerik1</div>
+              <div class="content-card">içerik2</div>
+              <div class="content-card">içerik3</div>
+              <div class="content-card">içerik4</div>
+              <div class="content-card">içerik5</div>
+            </div>
+            <div class="slider-navigation">
+              <div class="nav-button">←</div>
+              <div class="nav-button">→</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- İzlenecek Bölümü -->
+        <div class="content-section">
+          <h3 class="section-title">İzlenecek</h3>
+          <div class="content-slider">
+            <div class="slider-content">
+              <div class="content-card">içerik1</div>
+              <div class="content-card">içerik2</div>
+              <div class="content-card">içerik3</div>
+              <div class="content-card">içerik4</div>
+              <div class="content-card">içerik5</div>
+            </div>
+            <div class="slider-navigation">
+              <div class="nav-button">←</div>
+              <div class="nav-button">→</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- İzlendi Bölümü -->
+        <div class="content-section">
+          <h3 class="section-title">İzlendi</h3>
+          <div class="content-slider">
+            <div class="slider-content">
+              <div class="content-card">içerik1</div>
+              <div class="content-card">içerik2</div>
+              <div class="content-card">içerik3</div>
+              <div class="content-card">içerik4</div>
+              <div class="content-card">içerik5</div>
+            </div>
+            <div class="slider-navigation">
+              <div class="nav-button">←</div>
+              <div class="nav-button">→</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- JavaScript Dosyaları -->
+  <script src="src/js/renderer.js"></script>
+</body>
+</html> 
