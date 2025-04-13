@@ -3,19 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="script-src 'self';">
+  <meta http-equiv="Content-Security-Policy" content="script-src 'self'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; font-src 'self' https://cdnjs.cloudflare.com;">
   <title>NextToWatch - İzleme Listenizi Takip Edin</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
   <link rel="stylesheet" href="src/css/styles.css">
 </head>
 <body>
   <div class="container">
     <!-- Başlık ve Arama Bölümü -->
     <header class="header">
-      <div class="logo">LOGO</div>
+      <div class="logo"><i class="fas fa-play-circle"></i> NTW</div>
       <div class="search-bar">
-        <input type="text" placeholder="Arama çubuğu">
+        <input type="text" placeholder="Film, dizi veya anime ara...">
       </div>
-      <button class="add-button">Yeni ekle butonu</button>
+      <button class="add-button">Yeni ekle</button>
     </header>
 
     <!-- Navigasyon Çubuğu -->

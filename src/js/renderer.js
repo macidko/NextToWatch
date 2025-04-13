@@ -1,20 +1,578 @@
 // DOM hazır olduğunda çalışacak fonksiyon
-document.addEventListener('DOMContentLoaded', () => {
-  // Navbar geçişleri için event listener
-  setupNavigation();
+document.addEventListener('DOMContentLoaded', async () => {
+  console.log('DOM yüklendi, event listener\'lar kuruluyor...');
   
-  // Kaydırma butonları için event listener
-  setupSliderNavigation();
-  
-  // İçerik kartları için event listener
-  setupContentCards();
+  // İzleme listesini yükle
+  await loadWatchlist();
   
   // Yeni ekle butonu için event listener
   setupAddButton();
   
-  // Arama fonksiyonu
+  // Diğer kurulumlar
+  setupNavigation();
   setupSearch();
 });
+
+// İzleme listesi verilerini tutan global değişken
+let watchlistData = { anime: [], movie: [], series: [] };
+
+// İzleme listesini yükle
+async function loadWatchlist() {
+  try {
+    console.log('İzleme listesi yükleniyor...');
+    
+    // IPC ile ana süreçten watchlist verilerini al
+    watchlistData = await window.ipcRenderer.invoke('get-watchlist');
+    console.log('İzleme listesi yüklendi:', watchlistData);
+    
+    // Sayfa içeriklerini güncelle
+    updatePageContents();
+    
+    return true;
+  } catch (error) {
+    console.error('İzleme listesi yüklenirken hata oluştu:', error);
+    return false;
+  }
+}
+
+// İzleme listesindeki içerikleri status'e göre filtrele
+function filterWatchlistByStatus(contentType, status) {
+  if (!watchlistData || !watchlistData[contentType]) {
+    return [];
+  }
+  
+  return watchlistData[contentType].filter(item => item.status === status);
+}
+
+// İçerik kartı oluştur
+function createContentCard(item) {
+  // Postersi olmayan içerikler için fallback
+  const posterUrl = item.poster || './src/assets/no-poster.png';
+  
+  // İzleme durumuna göre renk ve etiket belirle
+  let statusColor, statusLabel, statusIcon;
+  switch(item.status) {
+    case 'watching':
+      statusColor = '#3a6cf3';
+      statusLabel = 'İzleniyor';
+      statusIcon = '▶️';
+      break;
+    case 'to-watch':
+      statusColor = '#f39c3a';
+      statusLabel = 'İzlenecek';
+      statusIcon = '🕒';
+      break;
+    case 'watched':
+      statusColor = '#32a852';
+      statusLabel = 'İzlendi';
+      statusIcon = '✓';
+      break;
+    default:
+      statusColor = '#888888';
+      statusLabel = 'Belirsiz';
+      statusIcon = '❓';
+  }
+
+  // Ekleme tarihini formatlama
+  const addedDate = item.addedAt ? new Date(item.addedAt).toLocaleDateString('tr-TR') : '';
+  
+  // Rastgele puan ve yüzde değerleri (gerçek uygulamada bunlar API'den gelecek)
+  const randomScore = (Math.random() * 2 + 8).toFixed(1); // 8.0-10.0 arası
+  const randomPercent = Math.floor(Math.random() * 30) + 70; // 70%-100% arası
+  
+  // İçerik türüne göre sezon verisi oluştur (bu örnek veri, gerçekte API'dan gelecek)
+  const hasSeasons = item.type === 'series' || item.type === 'anime';
+  
+  // Örnek sezon verisi (gerçek uygulamada API'dan veya kullanıcı verilerinden gelecek)
+  const seasonCount = hasSeasons ? Math.floor(Math.random() * 5) + 1 : 0; // 1-5 arası sezon
+  const seasons = [];
+  
+  if (hasSeasons) {
+    for (let i = 1; i <= seasonCount; i++) {
+      const episodeCount = Math.floor(Math.random() * 20) + 5; // 5-24 arası bölüm
+      const watchedEpisodes = Math.floor(Math.random() * episodeCount); // 0 ile episodeCount arası izlenmiş bölüm
+      
+      seasons.push({
+        number: i,
+        title: `Sezon ${i}`,
+        episodeCount,
+        watchedEpisodes
+      });
+    }
+  }
+  
+  // İzleme ilerlemesi hesapla
+  let totalEpisodes = 0;
+  let totalWatchedEpisodes = 0;
+  
+  seasons.forEach(season => {
+    totalEpisodes += season.episodeCount;
+    totalWatchedEpisodes += season.watchedEpisodes;
+  });
+  
+  const progress = totalEpisodes > 0 ? Math.round((totalWatchedEpisodes / totalEpisodes) * 100) : 0;
+  
+  return `
+    <div class="content-card" data-id="${item.id}" data-type="${item.type}">
+      <div class="card-inner">
+        <div class="card-front">
+          <div class="card-status-badge" style="background-color: ${statusColor}">
+            <span class="status-icon">${statusIcon}</span>
+            <span class="status-text">${statusLabel}</span>
+          </div>
+          
+          <div class="card-poster-container">
+            <div class="card-poster" style="background-image: url('${posterUrl}')"></div>
+            <div class="card-gradient-overlay"></div>
+            
+            <div class="card-quick-info">
+              <div class="card-rating" title="Puan">
+                <span class="rating-value">${randomScore}</span>
+                <div class="rating-stars">★★★★<span class="half-star">★</span></div>
+              </div>
+              <div class="card-match" title="Eşleşme">
+                <div class="match-percent">${randomPercent}%</div>
+                <div class="match-label">eşleşme</div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="card-info">
+            <h4 class="card-title">${item.title}</h4>
+            <div class="card-meta">
+              ${item.year ? `<span class="card-year">${item.year}</span>` : ''}
+              <span class="card-type">${item.type === 'movie' ? 'Film' : item.type === 'series' ? 'Dizi' : 'Anime'}</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="card-back">
+          <button class="card-back-close">✕</button>
+          <h4 class="card-back-title">${item.title}</h4>
+          
+          ${hasSeasons ? `
+          <div class="card-progress-container">
+            <div class="progress-bar">
+              <div class="progress-value" style="width: ${progress}%"></div>
+            </div>
+            <div class="progress-text">${progress}% tamamlandı (${totalWatchedEpisodes}/${totalEpisodes} bölüm)</div>
+          </div>
+          
+          <div class="seasons-container">
+            ${seasons.map(season => `
+              <div class="season-item">
+                <div class="season-header">
+                  <h5 class="season-title">${season.title}</h5>
+                  <div class="season-progress">${season.watchedEpisodes}/${season.episodeCount}</div>
+                </div>
+                <div class="episodes-grid">
+                  ${Array.from({ length: season.episodeCount }, (_, i) => {
+                    const episodeNum = i + 1;
+                    const isWatched = episodeNum <= season.watchedEpisodes;
+                    return `
+                      <button class="episode-button ${isWatched ? 'watched' : ''}" 
+                        data-season="${season.number}" 
+                        data-episode="${episodeNum}" 
+                        title="Bölüm ${episodeNum}">
+                        ${episodeNum}
+                      </button>
+                    `;
+                  }).join('')}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+          ` : `
+          <div class="card-back-details">
+            <p><strong>Tür:</strong> ${item.type === 'movie' ? 'Film' : item.type === 'series' ? 'Dizi' : 'Anime'}</p>
+            ${item.year ? `<p><strong>Yıl:</strong> ${item.year}</p>` : ''}
+            <p><strong>Durum:</strong> <span style="color:${statusColor}">${statusLabel}</span></p>
+            <p><strong>Eklenme:</strong> ${addedDate}</p>
+          </div>
+          
+          <div class="card-back-actions">
+            <button class="card-back-action-button edit-button" title="Düzenle">Düzenle</button>
+            <button class="card-back-action-button remove-button" title="Kaldır">Kaldır</button>
+          </div>
+          
+          <div class="card-actions-secondary">
+            <button class="card-action-secondary-button" data-status="watched">
+              ${item.status === 'watched' ? 'İzlendi ✓' : 'İzlendi Olarak İşaretle'}
+            </button>
+          </div>
+          `}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// Sayfa içeriklerini güncelle
+function updatePageContents() {
+  // Anime sayfası
+  const animeWatching = filterWatchlistByStatus('anime', 'watching').map(createContentCard).join('');
+  const animeToWatch = filterWatchlistByStatus('anime', 'to-watch').map(createContentCard).join('');
+  const animeWatched = filterWatchlistByStatus('anime', 'watched').map(createContentCard).join('');
+  
+  // Film sayfası
+  const movieWatching = filterWatchlistByStatus('movie', 'watching').map(createContentCard).join('');
+  const movieToWatch = filterWatchlistByStatus('movie', 'to-watch').map(createContentCard).join('');
+  const movieWatched = filterWatchlistByStatus('movie', 'watched').map(createContentCard).join('');
+  
+  // Dizi sayfası
+  const seriesWatching = filterWatchlistByStatus('series', 'watching').map(createContentCard).join('');
+  const seriesToWatch = filterWatchlistByStatus('series', 'to-watch').map(createContentCard).join('');
+  const seriesWatched = filterWatchlistByStatus('series', 'watched').map(createContentCard).join('');
+  
+  // Sayfa içeriklerini güncelle
+  pageContents['Anime'] = `
+    <div class="category">
+      <h2 class="category-title">Anime</h2>
+      
+      <div class="content-section">
+        <h3 class="section-title">İzleniyor</h3>
+        <div class="content-slider">
+          <div class="slider-content">
+            ${animeWatching || '<div class="no-content">İzlenen anime yok</div>'}
+          </div>
+          <div class="slider-navigation">
+            <div class="nav-button">←</div>
+            <div class="nav-button">→</div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="content-section">
+        <h3 class="section-title">İzlenecek</h3>
+        <div class="content-slider">
+          <div class="slider-content">
+            ${animeToWatch || '<div class="no-content">İzlenecek anime yok</div>'}
+          </div>
+          <div class="slider-navigation">
+            <div class="nav-button">←</div>
+            <div class="nav-button">→</div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="content-section">
+        <h3 class="section-title">İzlendi</h3>
+        <div class="content-slider">
+          <div class="slider-content">
+            ${animeWatched || '<div class="no-content">İzlenen anime yok</div>'}
+          </div>
+          <div class="slider-navigation">
+            <div class="nav-button">←</div>
+            <div class="nav-button">→</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  pageContents['Film'] = `
+    <div class="category">
+      <h2 class="category-title">Film</h2>
+      
+      <div class="content-section">
+        <h3 class="section-title">İzleniyor</h3>
+        <div class="content-slider">
+          <div class="slider-content">
+            ${movieWatching || '<div class="no-content">İzlenen film yok</div>'}
+          </div>
+          <div class="slider-navigation">
+            <div class="nav-button">←</div>
+            <div class="nav-button">→</div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="content-section">
+        <h3 class="section-title">İzlenecek</h3>
+        <div class="content-slider">
+          <div class="slider-content">
+            ${movieToWatch || '<div class="no-content">İzlenecek film yok</div>'}
+          </div>
+          <div class="slider-navigation">
+            <div class="nav-button">←</div>
+            <div class="nav-button">→</div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="content-section">
+        <h3 class="section-title">İzlendi</h3>
+        <div class="content-slider">
+          <div class="slider-content">
+            ${movieWatched || '<div class="no-content">İzlenen film yok</div>'}
+          </div>
+          <div class="slider-navigation">
+            <div class="nav-button">←</div>
+            <div class="nav-button">→</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  pageContents['Dizi'] = `
+    <div class="category">
+      <h2 class="category-title">Dizi</h2>
+      
+      <div class="content-section">
+        <h3 class="section-title">İzleniyor</h3>
+        <div class="content-slider">
+          <div class="slider-content">
+            ${seriesWatching || '<div class="no-content">İzlenen dizi yok</div>'}
+          </div>
+          <div class="slider-navigation">
+            <div class="nav-button">←</div>
+            <div class="nav-button">→</div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="content-section">
+        <h3 class="section-title">İzlenecek</h3>
+        <div class="content-slider">
+          <div class="slider-content">
+            ${seriesToWatch || '<div class="no-content">İzlenecek dizi yok</div>'}
+          </div>
+          <div class="slider-navigation">
+            <div class="nav-button">←</div>
+            <div class="nav-button">→</div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="content-section">
+        <h3 class="section-title">İzlendi</h3>
+        <div class="content-slider">
+          <div class="slider-content">
+            ${seriesWatched || '<div class="no-content">İzlenen dizi yok</div>'}
+          </div>
+          <div class="slider-navigation">
+            <div class="nav-button">←</div>
+            <div class="nav-button">→</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  // Mevcut açık sayfayı güncelle
+  const activeNavItem = document.querySelector('.navbar-item.active');
+  if (activeNavItem) {
+    const pageName = activeNavItem.textContent;
+    const mainContent = document.querySelector('.main-content');
+    
+    if (pageContents[pageName]) {
+      mainContent.innerHTML = pageContents[pageName];
+      console.log(`${pageName} içeriği güncellendi`);
+      
+      // Slider butonları için event listener'ları yeniden ekle
+      setupSliderNavigation();
+      
+      // İçerik kartları için tıklama olayı ekle
+      setupContentCardEvents();
+    }
+  }
+}
+
+// İçerik kartları için tıklama olayı
+function setupContentCardEvents() {
+  const contentCards = document.querySelectorAll('.content-card');
+  
+  contentCards.forEach(card => {
+    // Kart içindeki tüm tıklanabilir elemanların kart çevirme olayını tetiklememesi için
+    const allClickableElements = card.querySelectorAll('button, .episode-button, .card-back-action-button, .card-action-secondary-button');
+    allClickableElements.forEach(element => {
+      element.addEventListener('click', (e) => {
+        e.stopPropagation();
+      });
+    });
+
+    // Kartın ön yüzüne tıklama ile çevirme
+    const cardFront = card.querySelector('.card-front');
+    if (cardFront) {
+      cardFront.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        card.classList.add('flipped');
+        console.log(`Kart çevrildi: ${card.dataset.id}, ${card.dataset.type}`);
+      });
+    }
+    
+    // Kart arka yüzündeki kapat butonu
+    const closeButton = card.querySelector('.card-back-close');
+    if (closeButton) {
+      closeButton.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        card.classList.remove('flipped');
+      });
+    }
+    
+    // Arka yüzdeki diğer butonlar için event listener
+    const editButton = card.querySelector('.card-back-action-button.edit-button');
+    if (editButton) {
+      editButton.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const id = card.dataset.id;
+        const type = card.dataset.type;
+        console.log(`İçerik düzenleniyor: ${id}, ${type}`);
+        // Daha sonra içerik düzenleme modalını açabilirsiniz
+      });
+    }
+    
+    const removeButton = card.querySelector('.card-back-action-button.remove-button');
+    if (removeButton) {
+      removeButton.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const id = card.dataset.id;
+        const type = card.dataset.type;
+        console.log(`İçerik kaldırılıyor: ${id}, ${type}`);
+        
+        // Kaldırma işlemini onayla
+        if (confirm('Bu içeriği izleme listenizden kaldırmak istediğinizden emin misiniz?')) {
+          removeFromWatchlist(id, type);
+        }
+      });
+    }
+    
+    // Bölüm butonları (dizi/anime içerikleri için)
+    const episodeButtons = card.querySelectorAll('.episode-button');
+    episodeButtons.forEach(button => {
+      button.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const id = card.dataset.id;
+        const type = card.dataset.type;
+        const seasonNumber = button.dataset.season;
+        const episodeNumber = button.dataset.episode;
+        
+        // Bölüm izlendi/izlenmedi olarak işaretle
+        button.classList.toggle('watched');
+        const isWatched = button.classList.contains('watched');
+        
+        console.log(`Bölüm ${isWatched ? 'izlendi' : 'izlenmedi'} olarak işaretlendi: ${type} ${id}, Sezon ${seasonNumber}, Bölüm ${episodeNumber}`);
+        
+        // Sezon ilerleme durumunu güncelle
+        updateSeasonProgress(card, seasonNumber);
+        
+        // Genel ilerleme durumunu güncelle
+        updateOverallProgress(card);
+        
+        // Sunucuya kaydet (gerçek uygulamada)
+        // await updateEpisodeStatus(id, type, seasonNumber, episodeNumber, isWatched);
+      });
+    });
+    
+    // İzlendi olarak işaretle butonu (film içerikleri için)
+    const watchedButton = card.querySelector('.card-action-secondary-button');
+    if (watchedButton) {
+      watchedButton.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const id = card.dataset.id;
+        const type = card.dataset.type;
+        const newStatus = watchedButton.dataset.status;
+        
+        console.log(`İçerik durumu değiştiriliyor: ${id}, ${type}, yeni durum: ${newStatus}`);
+        
+        try {
+          // IPC ile ana sürece bildir
+          const result = await window.ipcRenderer.invoke('update-content-status', id, type, newStatus);
+          
+          if (result) {
+            console.log('İçerik durumu başarıyla güncellendi');
+            
+            // İzleme listesini güncelle
+            await loadWatchlist();
+          } else {
+            console.error('İçerik durumu güncellenemedi');
+          }
+        } catch (error) {
+          console.error('Durum güncelleme hatası:', error);
+        }
+      });
+    }
+  });
+}
+
+// Sezon ilerleme durumunu güncelle
+function updateSeasonProgress(card, seasonNumber) {
+  const seasonItem = card.querySelector(`.season-item:nth-child(${seasonNumber})`);
+  if (!seasonItem) return;
+  
+  const episodeButtons = seasonItem.querySelectorAll('.episode-button');
+  const totalEpisodes = episodeButtons.length;
+  const watchedEpisodes = seasonItem.querySelectorAll('.episode-button.watched').length;
+  
+  // İlerleme metnini güncelle
+  const progressText = seasonItem.querySelector('.season-progress');
+  if (progressText) {
+    progressText.textContent = `${watchedEpisodes}/${totalEpisodes}`;
+  }
+}
+
+// Genel ilerleme durumunu güncelle
+function updateOverallProgress(card) {
+  // Tüm bölümleri say
+  const allEpisodes = card.querySelectorAll('.episode-button');
+  const totalEpisodes = allEpisodes.length;
+  const watchedEpisodes = card.querySelectorAll('.episode-button.watched').length;
+  
+  // İlerleme yüzdesini hesapla
+  const progress = totalEpisodes > 0 ? Math.round((watchedEpisodes / totalEpisodes) * 100) : 0;
+  
+  // İlerleme çubuğunu güncelle
+  const progressBar = card.querySelector('.progress-value');
+  if (progressBar) {
+    progressBar.style.width = `${progress}%`;
+  }
+  
+  // İlerleme metnini güncelle
+  const progressText = card.querySelector('.progress-text');
+  if (progressText) {
+    progressText.textContent = `${progress}% tamamlandı (${watchedEpisodes}/${totalEpisodes} bölüm)`;
+  }
+}
+
+// İzleme listesinden içerik kaldır
+async function removeFromWatchlist(id, type) {
+  try {
+    console.log(`İzleme listesinden kaldırılıyor: ${id}, ${type}`);
+    
+    // IPC ile ana sürece bildir
+    const result = await window.ipcRenderer.invoke('remove-from-watchlist', id, type);
+    
+    if (result) {
+      console.log('İçerik başarıyla kaldırıldı');
+      
+      // İzleme listesini güncelle
+      await loadWatchlist();
+    } else {
+      console.error('İçerik kaldırılamadı');
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('İçerik kaldırma hatası:', error);
+    return false;
+  }
+}
+
+// İçerik detaylarını göster
+function showContentDetails(id, type) {
+  // Şu an için sadece konsola yazdırıyoruz
+  // Daha sonra detay modalını ekleyebilirsiniz
+  console.log(`İçerik detayları gösteriliyor: ${id}, ${type}`);
+}
 
 // Sayfa içeriği - farklı kategoriler için içerik konteynerları
 const pageContents = {
@@ -25,11 +583,7 @@ const pageContents = {
         <h3 class="section-title">En Son Eklenenler</h3>
         <div class="content-slider">
           <div class="slider-content">
-            <div class="content-card" data-id="101">Yeni İçerik 1</div>
-            <div class="content-card" data-id="102">Yeni İçerik 2</div>
-            <div class="content-card" data-id="103">Yeni İçerik 3</div>
-            <div class="content-card" data-id="104">Yeni İçerik 4</div>
-            <div class="content-card" data-id="105">Yeni İçerik 5</div>
+            <!-- API'den dinamik olarak doldurulacak -->
           </div>
           <div class="slider-navigation">
             <div class="nav-button">←</div>
@@ -42,17 +596,14 @@ const pageContents = {
   'Film': `
     <div class="category">
       <h2 class="category-title">Film</h2>
-
-      <!-- İzleniyor Bölümü -->
+      
       <div class="content-section">
         <h3 class="section-title">İzleniyor</h3>
         <div class="content-slider">
           <div class="slider-content">
-            <div class="content-card" data-id="1">Film 1</div>
-            <div class="content-card" data-id="2">Film 2</div>
-            <div class="content-card" data-id="3">Film 3</div>
-            <div class="content-card" data-id="4">Film 4</div>
-            <div class="content-card" data-id="5">Film 5</div>
+            <div class="content-card">Film 1</div>
+            <div class="content-card">Film 2</div>
+            <div class="content-card">Film 3</div>
           </div>
           <div class="slider-navigation">
             <div class="nav-button">←</div>
@@ -60,35 +611,14 @@ const pageContents = {
           </div>
         </div>
       </div>
-
-      <!-- İzlenecek Bölümü -->
+      
       <div class="content-section">
         <h3 class="section-title">İzlenecek</h3>
         <div class="content-slider">
           <div class="slider-content">
-            <div class="content-card" data-id="6">Film 6</div>
-            <div class="content-card" data-id="7">Film 7</div>
-            <div class="content-card" data-id="8">Film 8</div>
-            <div class="content-card" data-id="9">Film 9</div>
-            <div class="content-card" data-id="10">Film 10</div>
-          </div>
-          <div class="slider-navigation">
-            <div class="nav-button">←</div>
-            <div class="nav-button">→</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- İzlendi Bölümü -->
-      <div class="content-section">
-        <h3 class="section-title">İzlendi</h3>
-        <div class="content-slider">
-          <div class="slider-content">
-            <div class="content-card" data-id="11">Film 11</div>
-            <div class="content-card" data-id="12">Film 12</div>
-            <div class="content-card" data-id="13">Film 13</div>
-            <div class="content-card" data-id="14">Film 14</div>
-            <div class="content-card" data-id="15">Film 15</div>
+            <div class="content-card">Film 4</div>
+            <div class="content-card">Film 5</div>
+            <div class="content-card">Film 6</div>
           </div>
           <div class="slider-navigation">
             <div class="nav-button">←</div>
@@ -101,17 +631,14 @@ const pageContents = {
   'Dizi': `
     <div class="category">
       <h2 class="category-title">Dizi</h2>
-
-      <!-- İzleniyor Bölümü -->
+      
       <div class="content-section">
         <h3 class="section-title">İzleniyor</h3>
         <div class="content-slider">
           <div class="slider-content">
-            <div class="content-card" data-id="21">Dizi 1</div>
-            <div class="content-card" data-id="22">Dizi 2</div>
-            <div class="content-card" data-id="23">Dizi 3</div>
-            <div class="content-card" data-id="24">Dizi 4</div>
-            <div class="content-card" data-id="25">Dizi 5</div>
+            <div class="content-card">Dizi 1</div>
+            <div class="content-card">Dizi 2</div>
+            <div class="content-card">Dizi 3</div>
           </div>
           <div class="slider-navigation">
             <div class="nav-button">←</div>
@@ -119,35 +646,14 @@ const pageContents = {
           </div>
         </div>
       </div>
-
-      <!-- İzlenecek Bölümü -->
+      
       <div class="content-section">
         <h3 class="section-title">İzlenecek</h3>
         <div class="content-slider">
           <div class="slider-content">
-            <div class="content-card" data-id="26">Dizi 6</div>
-            <div class="content-card" data-id="27">Dizi 7</div>
-            <div class="content-card" data-id="28">Dizi 8</div>
-            <div class="content-card" data-id="29">Dizi 9</div>
-            <div class="content-card" data-id="30">Dizi 10</div>
-          </div>
-          <div class="slider-navigation">
-            <div class="nav-button">←</div>
-            <div class="nav-button">→</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- İzlendi Bölümü -->
-      <div class="content-section">
-        <h3 class="section-title">İzlendi</h3>
-        <div class="content-slider">
-          <div class="slider-content">
-            <div class="content-card" data-id="31">Dizi 11</div>
-            <div class="content-card" data-id="32">Dizi 12</div>
-            <div class="content-card" data-id="33">Dizi 13</div>
-            <div class="content-card" data-id="34">Dizi 14</div>
-            <div class="content-card" data-id="35">Dizi 15</div>
+            <div class="content-card">Dizi 4</div>
+            <div class="content-card">Dizi 5</div>
+            <div class="content-card">Dizi 6</div>
           </div>
           <div class="slider-navigation">
             <div class="nav-button">←</div>
@@ -160,17 +666,14 @@ const pageContents = {
   'Anime': `
     <div class="category">
       <h2 class="category-title">Anime</h2>
-
-      <!-- İzleniyor Bölümü -->
+      
       <div class="content-section">
         <h3 class="section-title">İzleniyor</h3>
         <div class="content-slider">
           <div class="slider-content">
-            <div class="content-card" data-id="41">Anime 1</div>
-            <div class="content-card" data-id="42">Anime 2</div>
-            <div class="content-card" data-id="43">Anime 3</div>
-            <div class="content-card" data-id="44">Anime 4</div>
-            <div class="content-card" data-id="45">Anime 5</div>
+            <div class="content-card">Anime 1</div>
+            <div class="content-card">Anime 2</div>
+            <div class="content-card">Anime 3</div>
           </div>
           <div class="slider-navigation">
             <div class="nav-button">←</div>
@@ -178,35 +681,14 @@ const pageContents = {
           </div>
         </div>
       </div>
-
-      <!-- İzlenecek Bölümü -->
+      
       <div class="content-section">
         <h3 class="section-title">İzlenecek</h3>
         <div class="content-slider">
           <div class="slider-content">
-            <div class="content-card" data-id="46">Anime 6</div>
-            <div class="content-card" data-id="47">Anime 7</div>
-            <div class="content-card" data-id="48">Anime 8</div>
-            <div class="content-card" data-id="49">Anime 9</div>
-            <div class="content-card" data-id="50">Anime 10</div>
-          </div>
-          <div class="slider-navigation">
-            <div class="nav-button">←</div>
-            <div class="nav-button">→</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- İzlendi Bölümü -->
-      <div class="content-section">
-        <h3 class="section-title">İzlendi</h3>
-        <div class="content-slider">
-          <div class="slider-content">
-            <div class="content-card" data-id="51">Anime 11</div>
-            <div class="content-card" data-id="52">Anime 12</div>
-            <div class="content-card" data-id="53">Anime 13</div>
-            <div class="content-card" data-id="54">Anime 14</div>
-            <div class="content-card" data-id="55">Anime 15</div>
+            <div class="content-card">Anime 4</div>
+            <div class="content-card">Anime 5</div>
+            <div class="content-card">Anime 6</div>
           </div>
           <div class="slider-navigation">
             <div class="nav-button">←</div>
@@ -219,15 +701,27 @@ const pageContents = {
   'İzleme Listem': `
     <div class="category">
       <h2 class="category-title">İzleme Listem</h2>
+      
       <div class="content-section">
-        <h3 class="section-title">Tüm İçerikler</h3>
+        <h3 class="section-title">Filmler</h3>
         <div class="content-slider">
           <div class="slider-content">
-            <div class="content-card" data-id="61">Liste 1</div>
-            <div class="content-card" data-id="62">Liste 2</div>
-            <div class="content-card" data-id="63">Liste 3</div>
-            <div class="content-card" data-id="64">Liste 4</div>
-            <div class="content-card" data-id="65">Liste 5</div>
+            <div class="content-card">Listem Film 1</div>
+            <div class="content-card">Listem Film 2</div>
+          </div>
+          <div class="slider-navigation">
+            <div class="nav-button">←</div>
+            <div class="nav-button">→</div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="content-section">
+        <h3 class="section-title">Diziler</h3>
+        <div class="content-slider">
+          <div class="slider-content">
+            <div class="content-card">Listem Dizi 1</div>
+            <div class="content-card">Listem Dizi 2</div>
           </div>
           <div class="slider-navigation">
             <div class="nav-button">←</div>
@@ -268,7 +762,310 @@ const pageContents = {
   `
 };
 
-// Navbar item tıklandığında aktif sınıfı değiştirme ve sayfa içeriğini güncelleme
+// Yeni içerik ekle butonu için event listener
+function setupAddButton() {
+  const addButton = document.querySelector('.add-button');
+  console.log('Add button setup:', addButton);
+  
+  if (addButton) {
+    addButton.addEventListener('click', () => {
+      console.log('Yeni ekle butonuna tıklandı');
+      
+      // Modal oluştur
+      const modal = document.createElement('div');
+      modal.className = 'modal';
+      
+      // Form içeriği
+      modal.innerHTML = `
+        <div class="add-form">
+          <h2>Yeni İçerik Ekle</h2>
+          <div class="form-group">
+            <input type="text" class="search-input" placeholder="Film, Dizi veya Anime Ara...">
+            <select class="search-type-select">
+              <option value="all">Tümü</option>
+              <option value="movie">Film</option>
+              <option value="series">Dizi</option>
+              <option value="anime">Anime</option>
+            </select>
+            <button class="search-button">Ara</button>
+          </div>
+          <div class="search-results"></div>
+          <div class="modal-actions">
+            <button class="cancel-button">İptal</button>
+          </div>
+        </div>
+      `;
+      
+      // Modal'ı sayfaya ekle
+      document.body.appendChild(modal);
+      
+      // Add-form'a tıklama olayı ekle - bu dışa tıklanınca kapanmaması için
+      const addForm = modal.querySelector('.add-form');
+      addForm.addEventListener('click', (e) => {
+        e.stopPropagation();
+      });
+      
+      // Arama butonu event listener
+      const searchButton = modal.querySelector('.search-button');
+      searchButton.addEventListener('click', () => {
+        performSearch(modal);
+      });
+
+      // Enter tuşu ile arama yapma
+      const searchInput = modal.querySelector('.search-input');
+      searchInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          performSearch(modal);
+        }
+      });
+      
+      // İptal butonu event listener
+      const cancelButton = modal.querySelector('.cancel-button');
+      cancelButton.addEventListener('click', () => {
+        modal.remove();
+      });
+      
+      // Modal dışına tıklama
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          modal.remove();
+        }
+      });
+
+      // Arama inputuna odaklan
+      searchInput.focus();
+    });
+  }
+}
+
+// Arama işlemini gerçekleştir
+async function performSearch(modal) {
+  const searchInput = modal.querySelector('.search-input');
+  const searchType = modal.querySelector('.search-type-select').value;
+  const resultsContainer = modal.querySelector('.search-results');
+  
+  const searchTerm = searchInput.value.trim();
+  console.log('Arama başlatılıyor, terim:', searchTerm, 'tip:', searchType);
+  
+  if (!searchTerm) {
+    resultsContainer.innerHTML = '<div class="no-results">Lütfen arama terimi girin</div>';
+    return;
+  }
+  
+  // Yükleniyor göster
+  resultsContainer.innerHTML = `
+    <div class="loading-indicator" style="position:relative; height:100px;">
+      <div class="loading-spinner"></div>
+      <div class="loading-message">Aranıyor...</div>
+    </div>
+  `;
+  
+  try {
+    console.log(`Arama yapılıyor: ${searchTerm}, türü: ${searchType}`);
+    
+    // API servisinin var olup olmadığını kontrol et
+    if (!window.apiService) {
+      console.error('API servisi bulunamadı! window.apiService:', window.apiService);
+      console.log('window nesnesi içeriği:', Object.keys(window));
+      throw new Error('API servisi bulunamadı');
+    }
+    
+    console.log('API servisi mevcut, searchContent çağrılıyor...');
+    
+    // Doğrudan API servisinin searchContent metodunu kullan
+    const searchResults = await window.apiService.searchContent(searchTerm, searchType);
+    console.log('Arama sonuçları alındı:', searchResults);
+    
+    // Sonuçları göster
+    displaySearchResults(resultsContainer, searchTerm, searchResults.items || []);
+    
+    // Sonuçlar konteynırına da event listener ekle
+    resultsContainer.addEventListener('click', (e) => {
+      // Event propagation'ı durdur
+      e.stopPropagation();
+    });
+    
+  } catch (error) {
+    console.error('Arama hatası:', error);
+    resultsContainer.innerHTML = `
+      <div class="error-message">
+        <p>Arama sırasında bir hata oluştu: ${error.message}</p>
+      </div>
+    `;
+  }
+}
+
+// Arama sonuçlarını göster
+function displaySearchResults(container, searchTerm, results) {
+  if (!results || results.length === 0) {
+    container.innerHTML = `
+      <div class="no-results">
+        <p>"${searchTerm}" için sonuç bulunamadı.</p>
+      </div>
+    `;
+    return;
+  }
+  
+  let html = `
+    <div class="search-results-header">
+      <h4>"${searchTerm}" için ${results.length} sonuç bulundu</h4>
+    </div>
+    <div class="search-results-grid">
+  `;
+  
+  results.forEach(item => {
+    const image = item.poster || item.image || '';
+    const type = item.type || 'bilinmiyor';
+    const year = item.year || '';
+    
+    // Türkçe içerik tipi
+    let contentType = '';
+    if (type === 'movie') contentType = 'Film';
+    else if (type === 'series') contentType = 'Dizi';
+    else if (type === 'anime') contentType = 'Anime';
+    
+    html += `
+      <div class="search-result-card">
+        <div class="result-poster" style="background-image: url('${image}')"></div>
+        <div class="result-info">
+          <h4 class="result-title">${item.title}</h4>
+          <div class="result-meta">
+            ${year ? `<span class="result-year">${year}</span>` : ''}
+            ${contentType ? `<span class="result-type">${contentType}</span>` : ''}
+          </div>
+          <div class="watch-status-selection">
+            <div class="status-buttons">
+              <button class="status-button" data-status="watching">İzleniyor</button>
+              <button class="status-button" data-status="to-watch">İzlenecek</button>
+              <button class="status-button" data-status="watched">İzledim</button>
+            </div>
+            <button class="add-to-list-button" data-id="${item.id}" data-type="${type}" data-title="${item.title}" disabled>
+              Ekle
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  });
+  
+  html += '</div>';
+  container.innerHTML = html;
+  
+  // Arama sonuç kartlarına tıklama olayı ekle
+  const searchResultCards = container.querySelectorAll('.search-result-card');
+  searchResultCards.forEach(card => {
+    card.addEventListener('click', (e) => {
+      // Event propagation'ı durdur
+      e.stopPropagation();
+    });
+  });
+  
+  // İzleme durumu butonları için event listener ekle
+  const statusButtons = container.querySelectorAll('.status-button');
+  statusButtons.forEach(button => {
+    button.addEventListener('click', (e) => {
+      // Event propagation'ı durdur
+      e.stopPropagation();
+      
+      // Tıklanan butonun içinde bulunduğu kart
+      const card = button.closest('.search-result-card');
+      
+      // Karttaki diğer tüm durum butonlarından active sınıfını kaldır
+      const otherButtons = card.querySelectorAll('.status-button');
+      otherButtons.forEach(btn => btn.classList.remove('active'));
+      
+      // Tıklanan butona active sınıfı ekle
+      button.classList.add('active');
+      
+      // Ekle butonunu aktifleştir
+      const addButton = card.querySelector('.add-to-list-button');
+      addButton.disabled = false;
+      
+      // Ekle butonuna seçilen durumu kaydet
+      addButton.setAttribute('data-status', button.getAttribute('data-status'));
+    });
+  });
+  
+  // Ekle butonları için event listener ekle
+  const addButtons = container.querySelectorAll('.add-to-list-button');
+  addButtons.forEach(button => {
+    button.addEventListener('click', async (e) => {
+      // Event propagation'ı durdur
+      e.stopPropagation();
+      
+      const id = button.dataset.id;
+      const type = button.dataset.type;
+      const title = button.dataset.title;
+      const status = button.dataset.status;
+      
+      // Poster URL'sini bul
+      const card = button.closest('.search-result-card');
+      const posterElement = card.querySelector('.result-poster');
+      const posterUrl = posterElement ? posterElement.style.backgroundImage.replace(/url\(['"]?(.*?)['"]?\)/i, '$1') : '';
+      
+      if (!status) {
+        console.error('İzleme durumu seçilmedi!');
+        return;
+      }
+      
+      button.disabled = true;
+      button.textContent = 'Ekleniyor...';
+      
+      try {
+        // İzleme listesine ekle
+        const success = await addToWatchlist(id, type, title, status, posterUrl);
+        
+        if (success) {
+          button.textContent = 'Eklendi ✓';
+          button.classList.add('success');
+          console.log(`"${title}" izleme listenize eklendi (Durum: ${status})`);
+          
+          // İzleme listesini yeniden yükle ve arayüzü güncelle
+          await loadWatchlist();
+          
+          // Popup'ı kapatmak yerine butonun stilini değiştiriyoruz
+          // 3 saniye sonra butonun normal durumuna dönmesini sağlayalım
+          setTimeout(() => {
+            button.textContent = 'Ekle';
+            button.classList.remove('success');
+            button.disabled = false;
+          }, 3000);
+        } else {
+          button.textContent = 'Eklenemedi';
+          button.disabled = false;
+        }
+      } catch (error) {
+        console.error('Listeye ekleme hatası:', error);
+        button.textContent = 'Eklenemedi';
+        button.disabled = false;
+      }
+    });
+  });
+}
+
+// İzleme listesine içerik ekle (JSON dosyasına yaz)
+async function addToWatchlist(id, type, title, status, poster) {
+  try {
+    console.log(`İzleme listesine ekleniyor: ${title}, durum: ${status}`);
+    
+    // JSON dosyasına yazmak için IPC kullan
+    const result = await window.ipcRenderer.invoke('add-to-watchlist', {
+      id,
+      type,
+      title,
+      status,
+      poster,
+      addedAt: new Date().toISOString()
+    });
+    
+    return result;
+  } catch (error) {
+    console.error('Listeye ekleme hatası:', error);
+    return false;
+  }
+}
+
+// Navbar navigasyonu
 function setupNavigation() {
   const navItems = document.querySelectorAll('.navbar-item');
   const mainContent = document.querySelector('.main-content');
@@ -281,371 +1078,208 @@ function setupNavigation() {
       // Tıklanan öğeye aktif sınıfı ekle
       item.classList.add('active');
       
+      console.log(`Menü seçildi: ${item.textContent}`);
+      
       // Sayfa içeriğini güncelle
-      const pageContent = pageContents[item.textContent] || '';
-      mainContent.innerHTML = pageContent;
-      
-      // Yeni eklenen içerikler için event listenerları tekrar kur
-      setupSliderNavigation();
-      setupContentCards();
-      
-      // Ayarlar sayfası için özel işlevler
-      if (item.textContent === 'Ayarlar') {
-        setupSettingsPage();
+      const pageName = item.textContent;
+      if (pageContents[pageName]) {
+        mainContent.innerHTML = pageContents[pageName];
+        console.log(`${pageName} içeriği yüklendi`);
+        
+        // Slider butonları için event listener'ları yeniden ekle
+        setupSliderNavigation();
+        
+        // İçerik kartları için event listener'ları ekle
+        setupContentCardEvents();
+      } else {
+        console.log(`${pageName} için içerik bulunamadı`);
       }
     });
   });
 }
 
-// Kaydırma butonları için işlev
+/**
+ * Slider navigasyonunu kurar, tüm sliderlara doğru çalışan kaydırma 
+ * butonları ve davranışları ekler
+ */
 function setupSliderNavigation() {
+  console.log('Slider navigasyonu kurulmaya başlıyor...');
+  
+  // Tüm slider'ları seç
   const sliders = document.querySelectorAll('.content-slider');
   
-  sliders.forEach(slider => {
-    const content = slider.querySelector('.slider-content');
-    const prevBtn = slider.querySelector('.nav-button:first-child');
-    const nextBtn = slider.querySelector('.nav-button:last-child');
-    
-    if (!content || !prevBtn || !nextBtn) return;
-    
-    // Kaydırma miktarını hesapla (card genişliği + margin)
-    const cardWidth = 180; // İçerik kartının genişliği
-    const cardMargin = 24; // İçerik kartının sağ margin değeri (1.5rem)
-    const scrollAmount = cardWidth + cardMargin;
-    
-    // İleri butonuna tıklandığında
-    nextBtn.addEventListener('click', (e) => {
-      e.stopPropagation(); // Event propagation'ı durdur
-      content.scrollBy({ left: scrollAmount, behavior: 'smooth' });
-    });
-    
-    // Geri butonuna tıklandığında
-    prevBtn.addEventListener('click', (e) => {
-      e.stopPropagation(); // Event propagation'ı durdur
-      content.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
-    });
-    
-    // Scroll durumuna göre butonları göster/gizle
-    content.addEventListener('scroll', () => {
-      // Scroll pozisyonunu kontrol et
-      const isAtStart = content.scrollLeft === 0;
-      const isAtEnd = content.scrollLeft + content.clientWidth >= content.scrollWidth - 5;
-      
-      // Sol butonu göster/gizle
-      prevBtn.style.opacity = isAtStart ? '0.5' : '1';
-      prevBtn.style.cursor = isAtStart ? 'default' : 'pointer';
-      
-      // Sağ butonu göster/gizle
-      nextBtn.style.opacity = isAtEnd ? '0.5' : '1';
-      nextBtn.style.cursor = isAtEnd ? 'default' : 'pointer';
-    });
-    
-    // Sayfa yüklendiğinde scroll durumunu kontrol et
-    setTimeout(() => {
-      // Yapay bir scroll eventi tetikle
-      content.dispatchEvent(new Event('scroll'));
-    }, 100);
-  });
-}
-
-// İçerik kartları için detay görünümü
-function setupContentCards() {
-  const contentCards = document.querySelectorAll('.content-card');
-  
-  contentCards.forEach(card => {
-    card.addEventListener('click', () => {
-      const contentId = card.getAttribute('data-id');
-      const contentName = card.textContent;
-      
-      // İçerik detayları modalını oluştur
-      showContentDetails(contentId, contentName);
-    });
-  });
-}
-
-// İçerik detaylarını gösteren modal
-function showContentDetails(id, name) {
-  // Eğer zaten bir modal varsa kaldır
-  const existingModal = document.querySelector('.modal-container');
-  if (existingModal) {
-    existingModal.remove();
+  if (!sliders || sliders.length === 0) {
+    console.log('Hiç slider bulunamadı!');
+    return;
   }
   
-  // Yeni modal oluştur
-  const modal = document.createElement('div');
-  modal.className = 'modal-container';
+  console.log(`${sliders.length} slider bulundu.`);
   
-  modal.innerHTML = `
-    <div class="modal-content">
-      <div class="modal-header">
-        <h2>${name}</h2>
-        <button class="close-button">✕</button>
-      </div>
-      <div class="modal-body">
-        <div class="content-details">
-          <div class="content-image">İçerik Görseli</div>
-          <div class="content-info">
-            <p><strong>ID:</strong> ${id}</p>
-            <p><strong>Tür:</strong> ${id < 20 ? 'Film' : id < 40 ? 'Dizi' : 'Anime'}</p>
-            <p><strong>Yayın Yılı:</strong> 2023</p>
-            <p><strong>Durum:</strong> ${
-              id % 3 === 0 ? 'İzlendi' : 
-              id % 3 === 1 ? 'İzleniyor' : 'İzlenecek'
-            }</p>
-          </div>
-        </div>
-        <div class="content-actions">
-          <button class="action-button ${id % 3 === 0 ? 'active' : ''}" data-status="watched">İzlendi</button>
-          <button class="action-button ${id % 3 === 1 ? 'active' : ''}" data-status="watching">İzleniyor</button>
-          <button class="action-button ${id % 3 === 2 ? 'active' : ''}" data-status="to-watch">İzlenecek</button>
-        </div>
-      </div>
-    </div>
-  `;
-  
-  document.body.appendChild(modal);
-  
-  // Modal kapatma butonu
-  const closeButton = modal.querySelector('.close-button');
-  closeButton.addEventListener('click', () => {
-    modal.remove();
-  });
-  
-  // Modal dışına tıklanınca kapatma
-  modal.addEventListener('click', (e) => {
-    if (e.target === modal) {
-      modal.remove();
+  // Her slider için kurulumu yap
+  sliders.forEach((slider, index) => {
+    // Slider içindeki gerekli öğeleri seç
+    const sliderContent = slider.querySelector('.slider-content');
+    const prevButton = slider.querySelector('.nav-button:first-child');
+    const nextButton = slider.querySelector('.nav-button:last-child');
+    
+    if (!sliderContent) {
+      console.log(`#${index} slider için içerik bulunamadı!`);
+      return;
     }
-  });
-  
-  // İzleme durumu butonları
-  const actionButtons = modal.querySelectorAll('.action-button');
-  actionButtons.forEach(button => {
-    button.addEventListener('click', () => {
-      // Aktif sınıfını tümünden kaldır
-      actionButtons.forEach(btn => btn.classList.remove('active'));
-      // Tıklanan butona aktif sınıfı ekle
-      button.classList.add('active');
+    
+    if (!prevButton || !nextButton) {
+      console.log(`#${index} slider için navigasyon butonları bulunamadı!`);
+      return;
+    }
+    
+    // Kartların bilgilerini al
+    const cards = sliderContent.querySelectorAll('.content-card');
+    
+    if (!cards || cards.length === 0) {
+      console.log(`#${index} slider'da kart bulunamadı!`);
+      prevButton.style.display = 'none';
+      nextButton.style.display = 'none';
+      return;
+    }
+    
+    // İlk kartın tam genişliğini hesapla (margin dahil)
+    const cardStyle = window.getComputedStyle(cards[0]);
+    const cardWidth = cards[0].offsetWidth + 
+                      parseInt(cardStyle.marginRight) + 
+                      parseInt(cardStyle.marginLeft);
+    
+    console.log(`Kart genişliği: ${cardWidth}px, Toplam kart sayısı: ${cards.length}`);
+    
+    // Görünür alan genişliğini hesapla
+    const visibleWidth = sliderContent.clientWidth;
+    const totalScrollWidth = sliderContent.scrollWidth;
+    
+    console.log(`Görünür genişlik: ${visibleWidth}px, Toplam kaydırma genişliği: ${totalScrollWidth}px`);
+    
+    // Başlangıçta sol butonunu gizle
+    prevButton.style.display = 'none';
+    
+    // Eğer tüm içerik görünür alandaysa butonları gizle
+    if (totalScrollWidth <= visibleWidth) {
+      console.log(`#${index} slider'da tüm içerik görünür, butonlar gizlendi.`);
+      prevButton.style.display = 'none';
+      nextButton.style.display = 'none';
+      return;
+    } else {
+      // İçerik tamamen görünmüyorsa sağ butonu göster
+      nextButton.style.display = 'flex';
+    }
+    
+    // Kaydırma fonksiyonları - görünür alanın %80'i kadar kaydır
+    const scrollAmount = Math.min(visibleWidth * 0.8, cardWidth * 3);
+    
+    const scrollNext = () => {
+      const currentPos = sliderContent.scrollLeft;
+      const targetPos = currentPos + scrollAmount;
       
-      // İzleme durumunu güncelle
-      const status = button.getAttribute('data-status');
-      console.log(`İçerik ${id} için durum güncellendi: ${status}`);
+      // Animasyonlu kaydırma
+      sliderContent.scrollTo({
+        left: targetPos,
+        behavior: 'smooth'
+      });
       
-      // Burada veritabanı güncelleme işlemleri yapılacak
-    });
-  });
-}
-
-// Yeni içerik ekleme modalı
-function setupAddButton() {
-  const addButton = document.querySelector('.add-button');
-  
-  if (addButton) {
-    addButton.addEventListener('click', () => {
-      // Eğer zaten bir modal varsa kaldır
-      const existingModal = document.querySelector('.modal-container');
-      if (existingModal) {
-        existingModal.remove();
+      console.log(`#${index} slider ileri kaydırma: ${currentPos}px -> ${targetPos}px`);
+    };
+    
+    const scrollPrev = () => {
+      const currentPos = sliderContent.scrollLeft;
+      const targetPos = Math.max(0, currentPos - scrollAmount);
+      
+      // Animasyonlu kaydırma
+      sliderContent.scrollTo({
+        left: targetPos,
+        behavior: 'smooth'
+      });
+      
+      console.log(`#${index} slider geri kaydırma: ${currentPos}px -> ${targetPos}px`);
+    };
+    
+    // Buton görünürlüğünü güncelle
+    const updateButtonVisibility = () => {
+      const scrollLeft = sliderContent.scrollLeft;
+      const maxScrollLeft = sliderContent.scrollWidth - sliderContent.clientWidth;
+      
+      // Tolerans değeri - piksel cinsinden
+      const tolerance = 2;
+      
+      // Sol buton (geri) - eğer scroll pozisyonu başlangıçtaysa gizle
+      if (scrollLeft <= tolerance) {
+        prevButton.style.display = 'none';
+      } else {
+        prevButton.style.display = 'flex';
       }
       
-      // Yeni içerik ekleme modalını oluştur
-      const modal = document.createElement('div');
-      modal.className = 'modal-container';
+      // Sağ buton (ileri) - eğer scroll pozisyonu sondaysa gizle
+      if (maxScrollLeft - scrollLeft <= tolerance) {
+        nextButton.style.display = 'none';
+      } else {
+        nextButton.style.display = 'flex';
+      }
       
-      modal.innerHTML = `
-        <div class="modal-content">
-          <div class="modal-header">
-            <h2>Yeni İçerik Ekle</h2>
-            <button class="close-button">✕</button>
-          </div>
-          <div class="modal-body">
-            <div class="form-group">
-              <label for="content-name">İçerik Adı</label>
-              <input type="text" id="content-name" placeholder="İçerik adını girin">
-            </div>
-            <div class="form-group">
-              <label for="content-type">İçerik Türü</label>
-              <select id="content-type">
-                <option value="film">Film</option>
-                <option value="dizi">Dizi</option>
-                <option value="anime">Anime</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label for="content-status">İzleme Durumu</label>
-              <select id="content-status">
-                <option value="to-watch">İzlenecek</option>
-                <option value="watching">İzleniyor</option>
-                <option value="watched">İzlendi</option>
-              </select>
-            </div>
-            <div class="form-actions">
-              <button class="cancel-button">İptal</button>
-              <button class="save-button">Kaydet</button>
-            </div>
-          </div>
-        </div>
-      `;
-      
-      document.body.appendChild(modal);
-      
-      // Modal kapatma butonu
-      const closeButton = modal.querySelector('.close-button');
-      const cancelButton = modal.querySelector('.cancel-button');
-      
-      [closeButton, cancelButton].forEach(button => {
-        button.addEventListener('click', () => {
-          modal.remove();
-        });
-      });
-      
-      // Modal dışına tıklanınca kapatma
-      modal.addEventListener('click', (e) => {
-        if (e.target === modal) {
-          modal.remove();
-        }
-      });
-      
-      // Kaydet butonu
-      const saveButton = modal.querySelector('.save-button');
-      saveButton.addEventListener('click', () => {
-        const contentName = document.getElementById('content-name').value;
-        const contentType = document.getElementById('content-type').value;
-        const contentStatus = document.getElementById('content-status').value;
-        
-        if (contentName.trim() === '') {
-          alert('İçerik adı boş olamaz!');
-          return;
-        }
-        
-        console.log('Yeni içerik eklendi:', {
-          name: contentName,
-          type: contentType,
-          status: contentStatus
-        });
-        
-        // Burada veritabanına kaydetme işlemleri yapılacak
-        
-        modal.remove();
-      });
+      // Debug bilgisi
+      console.log(`#${index} slider pozisyon: ${scrollLeft}px / ${maxScrollLeft}px`);
+    };
+    
+    // Başlangıçta buton görünürlüğünü ayarla
+    updateButtonVisibility();
+    
+    // Butonlara tıklama olaylarını ekle
+    nextButton.addEventListener('click', () => {
+      scrollNext();
+      // Küçük bir gecikmeyle buton görünürlüğünü güncelle (animasyon tamamlandıktan sonra)
+      setTimeout(updateButtonVisibility, 500);
     });
-  }
+    
+    prevButton.addEventListener('click', () => {
+      scrollPrev();
+      // Küçük bir gecikmeyle buton görünürlüğünü güncelle (animasyon tamamlandıktan sonra)
+      setTimeout(updateButtonVisibility, 500);
+    });
+    
+    // Kaydırma olayında buton görünürlüğünü güncelle
+    sliderContent.addEventListener('scroll', updateButtonVisibility);
+    
+    // Pencere boyutu değiştiğinde buton görünürlüğünü güncelle
+    window.addEventListener('resize', () => {
+      // Görünür alan yeniden hesaplanmalı
+      const newVisibleWidth = sliderContent.clientWidth;
+      const newTotalWidth = sliderContent.scrollWidth;
+      
+      console.log(`#${index} slider boyutu değişti: ${newVisibleWidth}px / ${newTotalWidth}px`);
+      
+      // Eğer tüm içerik görünür hale geldiyse butonları gizle
+      if (newTotalWidth <= newVisibleWidth) {
+        prevButton.style.display = 'none';
+        nextButton.style.display = 'none';
+      } else {
+        // Değilse normal buton görünürlüğü kurallarını uygula
+        updateButtonVisibility();
+      }
+    });
+    
+    console.log(`#${index} slider kurulumu tamamlandı.`);
+  });
+  
+  console.log('Tüm slider navigasyonları kuruldu.');
 }
 
 // Arama fonksiyonu
 function setupSearch() {
-  const searchInput = document.querySelector('.search-bar input');
+  const searchBar = document.querySelector('.search-bar input');
   
-  if (searchInput) {
-    searchInput.addEventListener('input', (e) => {
-      const searchTerm = e.target.value.trim().toLowerCase();
-      
-      if (searchTerm.length < 2) return; // En az 2 karakter gerekli
-      
-      console.log('Aranan:', searchTerm);
-      
-      // Arama sonucu 500ms sonra göster (inputta yazmayı bitirsin diye)
-      setTimeout(() => {
-        if (searchTerm === searchInput.value.trim().toLowerCase() && searchTerm.length >= 2) {
-          showSearchResults(searchTerm);
+  if (searchBar) {
+    searchBar.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        const searchTerm = searchBar.value.trim();
+        if (searchTerm.length > 0) {
+          console.log(`Arama yapılıyor: ${searchTerm}`);
         }
-      }, 500);
-    });
-  }
-}
-
-// Arama sonuçlarını göster
-function showSearchResults(searchTerm) {
-  // Arama sonucu sayfasını oluştur
-  const mainContent = document.querySelector('.main-content');
-  
-  mainContent.innerHTML = `
-    <div class="category">
-      <h2 class="category-title">"${searchTerm}" için arama sonuçları</h2>
-      
-      <div class="content-section">
-        <h3 class="section-title">Filmler</h3>
-        <div class="search-results">
-          ${getSearchResults(searchTerm, 'film')}
-        </div>
-      </div>
-      
-      <div class="content-section">
-        <h3 class="section-title">Diziler</h3>
-        <div class="search-results">
-          ${getSearchResults(searchTerm, 'dizi')}
-        </div>
-      </div>
-      
-      <div class="content-section">
-        <h3 class="section-title">Animeler</h3>
-        <div class="search-results">
-          ${getSearchResults(searchTerm, 'anime')}
-        </div>
-      </div>
-    </div>
-  `;
-  
-  // Arama sonuçları için event listenerları kur
-  setupContentCards();
-}
-
-// Demo arama sonuçları
-function getSearchResults(searchTerm, type) {
-  let results = '';
-  const types = {
-    'film': ['Film 1', 'Film 3', 'Film 5', 'Aksiyon Filmi', 'Macera Filmi'],
-    'dizi': ['Dizi 2', 'Dizi 4', 'Gizem Dizisi', 'Aksiyon Dizisi'],
-    'anime': ['Anime 1', 'Anime 3', 'Anime 5', 'Aksiyon Animesi']
-  };
-  
-  const filteredResults = types[type].filter(item => 
-    item.toLowerCase().includes(searchTerm)
-  );
-  
-  if (filteredResults.length === 0) {
-    return '<div class="no-results">Sonuç bulunamadı</div>';
-  }
-  
-  filteredResults.forEach((item, index) => {
-    results += `<div class="content-card" data-id="${index + 100}">${item}</div>`;
-  });
-  
-  return results;
-}
-
-// Ayarlar sayfası için özel işlevler
-function setupSettingsPage() {
-  // Tema değiştirme butonları
-  const themeButtons = document.querySelectorAll('.theme-button');
-  
-  if (themeButtons.length) {
-    themeButtons.forEach(button => {
-      button.addEventListener('click', () => {
-        // Aktif sınıfını tümünden kaldır
-        themeButtons.forEach(btn => btn.classList.remove('active'));
-        // Tıklanan butona aktif sınıfı ekle
-        button.classList.add('active');
-        
-        // Tema değiştir
-        const theme = button.getAttribute('data-theme');
-        console.log(`Tema değiştirildi: ${theme}`);
-        
-        // Burada tema değiştirme işlemi yapılacak
-      });
-    });
-  }
-  
-  // Veri yönetimi butonları
-  const dataButtons = document.querySelectorAll('.settings-button');
-  
-  if (dataButtons.length) {
-    dataButtons.forEach(button => {
-      button.addEventListener('click', () => {
-        console.log(`${button.textContent} işlemi başlatıldı`);
-        
-        // Burada veri dışa/içe aktarma işlemleri yapılacak
-      });
+      }
     });
   }
 } 
