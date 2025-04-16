@@ -4,7 +4,7 @@ const axios = require('axios');
 const BASE_URL = 'https://api.jikan.moe/v4';
 
 // API istekleri arasında bekleme süresi (milisaniye) - Rate Limit için
-const API_DELAY = 350;
+const API_DELAY = 400; // Rate limit'i aşmamak için biraz arttırdım
 
 // Son istek zamanını takip etmek için
 let lastRequestTime = 0;
@@ -19,6 +19,7 @@ const throttleRequest = async () => {
   
   if (timeSinceLastRequest < API_DELAY) {
     const delay = API_DELAY - timeSinceLastRequest;
+    console.log(`Jikan API rate limit: ${delay}ms bekleniyor...`);
     await new Promise(resolve => setTimeout(resolve, delay));
   }
   
@@ -33,7 +34,8 @@ const throttleRequest = async () => {
  */
 const searchAnime = async (query, page = 1) => {
   if (!query) {
-    throw new Error('Arama metni gereklidir');
+    console.warn('Jikan API: Arama metni boş.');
+    return { data: [] };
   }
   
   try {
@@ -46,14 +48,31 @@ const searchAnime = async (query, page = 1) => {
         page: page,
         limit: 15,
         sfw: true
-      }
+      },
+      timeout: 8000 // 8 saniye zaman aşımı
     });
     
-    console.log('Jikan API yanıtı:', response.data);
+    console.log(`Jikan API yanıtı: ${response.data.data?.length || 0} sonuç bulundu`);
     return response.data;
   } catch (error) {
-    console.error('Anime arama hatası:', error);
-    throw error;
+    console.error('Anime arama hatası:', error.message);
+    
+    // Özel hata mesajları
+    if (error.response) {
+      // API yanıt verdi ama hata kodu döndü
+      console.error(`Jikan API hata kodu: ${error.response.status}`, error.response.data);
+      return { 
+        data: [], 
+        error: `API yanıt hatası: ${error.response.status} - ${error.response.data?.message || 'Bilinmeyen hata'}` 
+      };
+    } else if (error.request) {
+      // İstek yapıldı ama yanıt alınamadı (zaman aşımı veya ağ hatası)
+      console.error('Jikan API yanıt vermedi, sunucu bağlantı sorunu olabilir.');
+      return { data: [], error: 'API sunucusuna bağlanılamadı. Rate limit aşılmış veya sunucu bakımda olabilir.' };
+    } else {
+      // İstek oluşturulurken hata oluştu
+      return { data: [], error: `API istek hatası: ${error.message}` };
+    }
   }
 };
 
@@ -64,17 +83,34 @@ const searchAnime = async (query, page = 1) => {
  */
 const getAnimeDetails = async (animeId) => {
   if (!animeId) {
-    throw new Error('Anime ID gereklidir');
+    console.warn('Jikan API: Anime ID boş.');
+    return { data: null, error: 'Anime ID gereklidir' };
   }
   
   try {
     await throttleRequest();
     
-    const response = await axios.get(`${BASE_URL}/anime/${animeId}`);
+    const response = await axios.get(`${BASE_URL}/anime/${animeId}`, {
+      timeout: 8000 // 8 saniye zaman aşımı
+    });
     return response.data;
   } catch (error) {
-    console.error('Anime detay hatası:', error);
-    throw error;
+    console.error('Anime detay hatası:', error.message);
+    
+    // Özel hata mesajları
+    if (error.response) {
+      // API yanıt verdi ama hata kodu döndü
+      return { 
+        data: null, 
+        error: `API yanıt hatası: ${error.response.status} - ${error.response.data?.message || 'Bilinmeyen hata'}` 
+      };
+    } else if (error.request) {
+      // İstek yapıldı ama yanıt alınamadı
+      return { data: null, error: 'API sunucusuna bağlanılamadı. Rate limit aşılmış olabilir.' };
+    } else {
+      // İstek oluşturulurken hata oluştu
+      return { data: null, error: `API istek hatası: ${error.message}` };
+    }
   }
 };
 
@@ -93,13 +129,25 @@ const getTopAnime = async (limit = 15, page = 1) => {
         page,
         limit,
         filter: 'bypopularity'
-      }
+      },
+      timeout: 8000 // 8 saniye zaman aşımı
     });
     
     return response.data;
   } catch (error) {
-    console.error('Popüler anime listesi hatası:', error);
-    throw error;
+    console.error('Popüler anime listesi hatası:', error.message);
+    
+    // Özel hata mesajları
+    if (error.response) {
+      return { 
+        data: [], 
+        error: `API yanıt hatası: ${error.response.status} - ${error.response.data?.message || 'Bilinmeyen hata'}` 
+      };
+    } else if (error.request) {
+      return { data: [], error: 'API sunucusuna bağlanılamadı. Rate limit aşılmış olabilir.' };
+    } else {
+      return { data: [], error: `API istek hatası: ${error.message}` };
+    }
   }
 };
 
@@ -114,7 +162,11 @@ const getSeasonalAnime = async (season, year = new Date().getFullYear(), page = 
   const validSeasons = ['winter', 'spring', 'summer', 'fall'];
   
   if (!validSeasons.includes(season)) {
-    throw new Error('Geçersiz mevsim. Geçerli değerler: winter, spring, summer, fall');
+    console.warn('Jikan API: Geçersiz mevsim.');
+    return { 
+      data: [], 
+      error: 'Geçersiz mevsim. Geçerli değerler: winter, spring, summer, fall' 
+    };
   }
   
   try {
@@ -124,13 +176,25 @@ const getSeasonalAnime = async (season, year = new Date().getFullYear(), page = 
       params: {
         page,
         limit: 15
-      }
+      },
+      timeout: 8000 // 8 saniye zaman aşımı
     });
     
     return response.data;
   } catch (error) {
-    console.error('Mevsimlik anime listesi hatası:', error);
-    throw error;
+    console.error('Mevsimlik anime listesi hatası:', error.message);
+    
+    // Özel hata mesajları
+    if (error.response) {
+      return { 
+        data: [], 
+        error: `API yanıt hatası: ${error.response.status} - ${error.response.data?.message || 'Bilinmeyen hata'}` 
+      };
+    } else if (error.request) {
+      return { data: [], error: 'API sunucusuna bağlanılamadı. Rate limit aşılmış olabilir.' };
+    } else {
+      return { data: [], error: `API istek hatası: ${error.message}` };
+    }
   }
 };
 
@@ -142,7 +206,8 @@ const getSeasonalAnime = async (season, year = new Date().getFullYear(), page = 
  */
 const getAnimeEpisodes = async (animeId, page = 1) => {
   if (!animeId) {
-    throw new Error('Anime ID gereklidir');
+    console.warn('Jikan API: Anime ID boş.');
+    return { data: [], error: 'Anime ID gereklidir' };
   }
   
   try {
@@ -151,13 +216,25 @@ const getAnimeEpisodes = async (animeId, page = 1) => {
     const response = await axios.get(`${BASE_URL}/anime/${animeId}/episodes`, {
       params: {
         page
-      }
+      },
+      timeout: 8000 // 8 saniye zaman aşımı
     });
     
     return response.data;
   } catch (error) {
-    console.error('Anime bölümleri hatası:', error);
-    throw error;
+    console.error('Anime bölümleri hatası:', error.message);
+    
+    // Özel hata mesajları
+    if (error.response) {
+      return { 
+        data: [], 
+        error: `API yanıt hatası: ${error.response.status} - ${error.response.data?.message || 'Bilinmeyen hata'}` 
+      };
+    } else if (error.request) {
+      return { data: [], error: 'API sunucusuna bağlanılamadı. Rate limit aşılmış olabilir.' };
+    } else {
+      return { data: [], error: `API istek hatası: ${error.message}` };
+    }
   }
 };
 
@@ -221,6 +298,10 @@ const formatSearchResults = (searchResults) => {
   };
 };
 
+// API servisini başlat
+console.log('Jikan API servisi başlatılıyor...');
+
+// Modülü dışa aktar
 module.exports = {
   searchAnime,
   getAnimeDetails,

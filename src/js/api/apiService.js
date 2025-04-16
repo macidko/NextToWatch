@@ -1,5 +1,31 @@
-const jikanApi = require('./jikanApi');
-const omdbApi = require('./omdbApi');
+// API modüllerini yükle
+let jikanApi, omdbApi;
+
+try {
+  jikanApi = require('./jikanApi');
+  console.log('Jikan API modülü başarıyla yüklendi');
+} catch (error) {
+  console.error('Jikan API modülü yüklenirken hata oluştu:', error.message);
+  jikanApi = {
+    searchAnime: () => ({ data: [], error: 'Jikan API modülü yüklenemedi' }),
+    getAnimeDetails: () => ({ data: null, error: 'Jikan API modülü yüklenemedi' }),
+    getTopAnime: () => ({ data: [], error: 'Jikan API modülü yüklenemedi' }),
+    formatSearchResults: () => ({ items: [], error: 'Jikan API modülü yüklenemedi' })
+  };
+}
+
+try {
+  omdbApi = require('./omdbApi');
+  console.log('OMDB API modülü başarıyla yüklendi');
+} catch (error) {
+  console.error('OMDB API modülü yüklenirken hata oluştu:', error.message);
+  omdbApi = {
+    search: () => ({ Response: 'False', Error: 'OMDB API modülü yüklenemedi' }),
+    getById: () => ({ Response: 'False', Error: 'OMDB API modülü yüklenemedi' }),
+    getSeasonDetails: () => ({ Response: 'False', Error: 'OMDB API modülü yüklenemedi' }),
+    getEpisodeDetails: () => ({ Response: 'False', Error: 'OMDB API modülü yüklenemedi' })
+  };
+}
 
 /**
  * API Servisi - Jikan ve OMDB API'lerini birleştiren merkezi servis
@@ -11,6 +37,8 @@ class ApiService {
     
     // Yerel veritabanı bağlantısı (Electron Store gibi)
     this.database = null;
+    
+    console.log('API Servisi başlatıldı');
   }
   
   /**
@@ -18,7 +46,14 @@ class ApiService {
    * @param {Object} database - Veritabanı referansı
    */
   setDatabase(database) {
+    if (!database) {
+      console.warn('API Service: Geçersiz veritabanı nesnesi');
+      return false;
+    }
+    
     this.database = database;
+    console.log('API Service: Veritabanı bağlantısı kuruldu');
+    return true;
   }
   
   /**
@@ -39,11 +74,30 @@ class ApiService {
     if (type === 'anime' || type === 'all') {
       try {
         console.log('Anime araması yapılıyor');
-        return await this.searchAnime(query);
-      } catch (error) {
-        console.error('Anime araması sırasında hata:', error);
+        const animeResults = await this.searchAnime(query);
+        
+        // Eğer sadece anime aranıyorsa doğrudan sonuçları döndür
         if (type === 'anime') {
-          throw error;
+          return animeResults;
+        }
+        
+        // Eğer 'all' tipinde arama yapılıyorsa ve anime araması başarılıysa,
+        // diğer arama tiplerini de dene ve sonuçları birleştir
+        if (type === 'all') {
+          const omdbResults = await this.searchOmdb(query, '');
+          
+          // Sonuçları birleştir
+          return {
+            items: [
+              ...(animeResults.items || []),
+              ...(omdbResults.items || [])
+            ]
+          };
+        }
+      } catch (error) {
+        console.error('Anime araması sırasında hata:', error.message);
+        if (type === 'anime') {
+          return { items: [], error: error.message };
         }
       }
     }
@@ -54,8 +108,8 @@ class ApiService {
         console.log('OMDB araması yapılıyor, tip:', type !== 'all' ? type : 'all');
         return await this.searchOmdb(query, type !== 'all' ? type : '');
       } catch (error) {
-        console.error('OMDB araması sırasında hata:', error);
-        throw error;
+        console.error('OMDB araması sırasında hata:', error.message);
+        return { items: [], error: error.message };
       }
     }
     
@@ -78,8 +132,20 @@ class ApiService {
     
     try {
       console.log('Jikan API ile anime araması başlatılıyor');
+      
+      if (!this.jikanApi || !this.jikanApi.searchAnime) {
+        console.error('Jikan API modülü bulunamadı veya searchAnime metodu tanımlı değil');
+        return { items: [], error: 'API modülü kullanılamıyor' };
+      }
+      
       const results = await this.jikanApi.searchAnime(query);
       console.log('Jikan API yanıtı alındı');
+      
+      // API'den hata geldi mi kontrol et
+      if (results.error) {
+        console.error('Jikan API hata verdi:', results.error);
+        return { items: [], error: results.error };
+      }
       
       if (!results || !results.data) {
         console.log('Geçerli veri yok, boş sonuç döndürülüyor');
@@ -103,8 +169,8 @@ class ApiService {
       console.log('İşlenen anime sonuçları:', items.length);
       return { items };
     } catch (error) {
-      console.error('Jikan API ile anime araması sırasında hata:', error);
-      throw error;
+      console.error('Jikan API ile anime araması sırasında hata:', error.message);
+      return { items: [], error: error.message };
     }
   }
   
@@ -124,12 +190,21 @@ class ApiService {
     
     try {
       console.log('OMDB API ile arama başlatılıyor');
+      
+      if (!this.omdbApi || !this.omdbApi.search) {
+        console.error('OMDB API modülü bulunamadı veya search metodu tanımlı değil');
+        return { items: [], error: 'API modülü kullanılamıyor' };
+      }
+      
       const results = await this.omdbApi.search(query, type);
       console.log('OMDB API yanıtı alındı:', results);
       
       if (!results || !results.Search || results.Response === 'False') {
         console.log('Geçerli sonuç bulunamadı, boş sonuç döndürülüyor');
-        return { items: [] };
+        return { 
+          items: [], 
+          error: results && results.Error ? results.Error : 'Sonuç bulunamadı' 
+        };
       }
       
       // Sonuçları dönüştür
@@ -145,8 +220,8 @@ class ApiService {
       console.log('İşlenen OMDB sonuçları:', items.length);
       return { items };
     } catch (error) {
-      console.error('OMDB API ile arama sırasında hata:', error);
-      throw error;
+      console.error('OMDB API ile arama sırasında hata:', error.message);
+      return { items: [], error: error.message };
     }
   }
   
@@ -158,16 +233,28 @@ class ApiService {
    */
   async getContentDetails(id, type) {
     if (!id) {
-      throw new Error('ID gereklidir');
+      console.warn('API Service: İçerik ID\'si gereklidir');
+      return { error: 'ID gereklidir' };
     }
     
     // Anime detayları
     if (type === 'anime') {
       try {
+        if (!this.jikanApi || !this.jikanApi.getAnimeDetails) {
+          console.error('Jikan API modülü bulunamadı veya getAnimeDetails metodu tanımlı değil');
+          return { error: 'API modülü kullanılamıyor' };
+        }
+        
         const animeDetails = await this.jikanApi.getAnimeDetails(id);
         
+        // API'den hata geldi mi kontrol et
+        if (animeDetails.error) {
+          console.error('Jikan API hata verdi:', animeDetails.error);
+          return { error: animeDetails.error };
+        }
+        
         if (!animeDetails || !animeDetails.data) {
-          throw new Error('Anime detayları bulunamadı');
+          return { error: 'Anime detayları bulunamadı' };
         }
         
         const anime = animeDetails.data;
@@ -185,18 +272,23 @@ class ApiService {
           genres: anime.genres?.map(genre => genre.name) || []
         };
       } catch (error) {
-        console.error('Anime detayları alınırken hata:', error);
-        throw error;
+        console.error('Anime detayları alınırken hata:', error.message);
+        return { error: error.message };
       }
     }
     
     // Film veya dizi detayları
     if (type === 'movie' || type === 'series') {
       try {
+        if (!this.omdbApi || !this.omdbApi.getById) {
+          console.error('OMDB API modülü bulunamadı veya getById metodu tanımlı değil');
+          return { error: 'API modülü kullanılamıyor' };
+        }
+        
         const contentDetails = await this.omdbApi.getById(id);
         
         if (!contentDetails || contentDetails.Response === 'False') {
-          throw new Error('İçerik detayları bulunamadı');
+          return { error: contentDetails?.Error || 'İçerik detayları bulunamadı' };
         }
         
         return {
@@ -214,12 +306,12 @@ class ApiService {
           totalSeasons: contentDetails.totalSeasons || ''
         };
       } catch (error) {
-        console.error('Film/Dizi detayları alınırken hata:', error);
-        throw error;
+        console.error('Film/Dizi detayları alınırken hata:', error.message);
+        return { error: error.message };
       }
     }
     
-    throw new Error('Desteklenmeyen içerik tipi');
+    return { error: 'Desteklenmeyen içerik tipi' };
   }
   
   /**
@@ -231,15 +323,17 @@ class ApiService {
    */
   async addToWatchlist(id, type, status = 'to-watch') {
     if (!id || !type) {
-      throw new Error('ID ve içerik tipi gereklidir');
+      console.warn('API Service: İçerik ID\'si ve tipi gereklidir');
+      return false;
     }
     
     // İçerik detaylarını getir
     try {
       const details = await this.getContentDetails(id, type);
       
-      if (!details) {
-        throw new Error('İçerik detayları bulunamadı');
+      if (!details || details.error) {
+        console.error('İçerik detayları alınamadı:', details?.error || 'Bilinmeyen hata');
+        return false;
       }
       
       // Veritabanına ekle
@@ -262,8 +356,8 @@ class ApiService {
         return false;
       }
     } catch (error) {
-      console.error('İzleme listesine eklerken hata:', error);
-      throw error;
+      console.error('İzleme listesine eklerken hata:', error.message);
+      return false;
     }
   }
   
@@ -278,22 +372,39 @@ class ApiService {
     
     if (type === 'anime' || type === 'all') {
       try {
-        const animeResults = await this.jikanApi.getTopAnime(limit);
-        
-        if (animeResults && animeResults.data) {
-          const animeItems = animeResults.data.map(anime => ({
-            id: anime.mal_id.toString(),
-            title: anime.title,
-            image: anime.images?.jpg?.image_url || '',
-            type: 'anime',
-            year: anime.aired?.from ? new Date(anime.aired.from).getFullYear().toString() : '',
-            score: anime.score || 0
-          }));
+        if (!this.jikanApi || !this.jikanApi.getTopAnime) {
+          console.error('Jikan API modülü bulunamadı veya getTopAnime metodu tanımlı değil');
+          if (type === 'anime') {
+            return { items: [], error: 'API modülü kullanılamıyor' };
+          }
+        } else {
+          const animeResults = await this.jikanApi.getTopAnime(limit);
           
-          results.items = [...results.items, ...animeItems];
+          // API'den hata geldi mi kontrol et
+          if (animeResults.error) {
+            console.error('Jikan API hata verdi:', animeResults.error);
+            if (type === 'anime') {
+              return { items: [], error: animeResults.error };
+            }
+          }
+          else if (animeResults && animeResults.data) {
+            const animeItems = animeResults.data.map(anime => ({
+              id: anime.mal_id.toString(),
+              title: anime.title,
+              image: anime.images?.jpg?.image_url || '',
+              type: 'anime',
+              year: anime.aired?.from ? new Date(anime.aired.from).getFullYear().toString() : '',
+              score: anime.score || 0
+            }));
+            
+            results.items = [...results.items, ...animeItems];
+          }
         }
       } catch (error) {
-        console.error('Popüler anime alınırken hata:', error);
+        console.error('Popüler anime alınırken hata:', error.message);
+        if (type === 'anime') {
+          return { items: [], error: error.message };
+        }
       }
     }
     

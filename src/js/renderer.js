@@ -2,6 +2,13 @@
 document.addEventListener('DOMContentLoaded', async () => {
   console.log('DOM yüklendi, event listener\'lar kuruluyor...');
   
+  // Sayfa yüklendiğinde, localStorage'dan son aktif sayfı kontrol et
+  const lastActivePage = localStorage.getItem('lastActivePage');
+  if (lastActivePage) {
+    console.log(`Son ziyaret edilen sayfa: ${lastActivePage}`);
+    currentActivePage = lastActivePage;
+  }
+  
   // İzleme listesini yükle
   await loadWatchlist();
   
@@ -16,6 +23,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 // İzleme listesi verilerini tutan global değişken
 let watchlistData = { anime: [], movie: [], series: [] };
 
+// Global aktif sayfa değişkeni - tüm sayfa geçişlerini kontrol eder
+let currentActivePage = 'Anasayfa';
+
 // İzleme listesini yükle
 async function loadWatchlist() {
   try {
@@ -26,7 +36,7 @@ async function loadWatchlist() {
     console.log('İzleme listesi yüklendi:', watchlistData);
     
     // Sayfa içeriklerini güncelle
-    updatePageContents();
+    renderCurrentPage();
     
     return true;
   } catch (error) {
@@ -207,8 +217,61 @@ function createContentCard(item) {
   `;
 }
 
+// Aktif sayfayı değiştir ve renderla
+function changePage(pageName) {
+  // Global değişkeni güncelle
+  currentActivePage = pageName;
+  console.log(`Aktif sayfa değiştirildi: ${currentActivePage}`);
+  
+  // Son aktif sayfa bilgisini localStorage'a kaydet
+  localStorage.setItem('lastActivePage', currentActivePage);
+  
+  // UI'daki aktif sekme göstergelerini güncelle
+  updateActiveTabIndicators();
+  
+  // Sayfayı renderla
+  renderCurrentPage();
+}
+
+// Aktif sekme göstergelerini güncelle
+function updateActiveTabIndicators() {
+  const navItems = document.querySelectorAll('.navbar-item');
+  
+  // Tüm aktif sınıfları kaldır
+  navItems.forEach(item => item.classList.remove('active'));
+  
+  // Mevcut aktif sayfayı işaretle
+  navItems.forEach(item => {
+    if (item.textContent === currentActivePage) {
+      item.classList.add('active');
+    }
+  });
+}
+
+// Mevcut aktif sayfayı renderla
+function renderCurrentPage() {
+  const mainContent = document.querySelector('.main-content');
+  
+  // Sayfa içeriğini oluştur
+  generatePageContents();
+  
+  // Aktif sayfayı göster
+  if (pageContents[currentActivePage]) {
+    mainContent.innerHTML = pageContents[currentActivePage];
+    console.log(`${currentActivePage} içeriği güncellendi`);
+    
+    // Slider butonları için event listener'ları yeniden ekle
+    setupSliderNavigation();
+    
+    // İçerik kartları için tıklama olayı ekle
+    setupContentCardEvents();
+  } else {
+    console.log(`${currentActivePage} için içerik bulunamadı`);
+  }
+}
+
 // Sayfa içeriklerini güncelle
-function updatePageContents() {
+function generatePageContents() {
   // Anime sayfası
   const animeWatching = filterWatchlistByStatus('anime', 'watching').map(createContentCard).join('');
   const animeToWatch = filterWatchlistByStatus('anime', 'to-watch').map(createContentCard).join('');
@@ -359,29 +422,34 @@ function updatePageContents() {
       </div>
     </div>
   `;
-  
-  // Mevcut açık sayfayı güncelle
-  const activeNavItem = document.querySelector('.navbar-item.active');
-  if (activeNavItem) {
-    const pageName = activeNavItem.textContent;
-    const mainContent = document.querySelector('.main-content');
-    
-    if (pageContents[pageName]) {
-      mainContent.innerHTML = pageContents[pageName];
-      console.log(`${pageName} içeriği güncellendi`);
-      
-      // Slider butonları için event listener'ları yeniden ekle
-      setupSliderNavigation();
-      
-      // İçerik kartları için tıklama olayı ekle
-      setupContentCardEvents();
-    }
-  }
 }
 
 // İçerik kartları için tıklama olayı
 function setupContentCardEvents() {
   const contentCards = document.querySelectorAll('.content-card');
+  
+  // Overlay ve popup elementi oluşturma
+  let overlay = document.querySelector('.card-overlay');
+  let popup = document.querySelector('.card-popup');
+  
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.className = 'card-overlay';
+    document.body.appendChild(overlay);
+  }
+  
+  if (!popup) {
+    popup = document.createElement('div');
+    popup.className = 'card-popup';
+    document.body.appendChild(popup);
+  }
+  
+  // Overlay'e tıklama ile popup'ı kapat
+  overlay.addEventListener('click', () => {
+    overlay.style.display = 'none';
+    popup.style.display = 'none';
+    popup.innerHTML = '';
+  });
   
   contentCards.forEach(card => {
     // Kart içindeki tüm tıklanabilir elemanların kart çevirme olayını tetiklememesi için
@@ -392,159 +460,345 @@ function setupContentCardEvents() {
       });
     });
 
-    // Kartın ön yüzüne tıklama ile çevirme
+    // Kartın ön yüzüne tıklama ile popup aç
     const cardFront = card.querySelector('.card-front');
     if (cardFront) {
       cardFront.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        card.classList.add('flipped');
-        console.log(`Kart çevrildi: ${card.dataset.id}, ${card.dataset.type}`);
-      });
-    }
-    
-    // Kart arka yüzündeki kapat butonu
-    const closeButton = card.querySelector('.card-back-close');
-    if (closeButton) {
-      closeButton.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        card.classList.remove('flipped');
-      });
-    }
-    
-    // Arka yüzdeki diğer butonlar için event listener
-    const editButton = card.querySelector('.card-back-action-button.edit-button');
-    if (editButton) {
-      editButton.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const id = card.dataset.id;
-        const type = card.dataset.type;
-        console.log(`İçerik düzenleniyor: ${id}, ${type}`);
-        // Daha sonra içerik düzenleme modalını açabilirsiniz
-      });
-    }
-    
-    const removeButton = card.querySelector('.card-back-action-button.remove-button');
-    if (removeButton) {
-      removeButton.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const id = card.dataset.id;
-        const type = card.dataset.type;
-        console.log(`İçerik kaldırılıyor: ${id}, ${type}`);
         
-        // Kaldırma işlemini onayla
-        if (confirm('Bu içeriği izleme listenizden kaldırmak istediğinizden emin misiniz?')) {
-          removeFromWatchlist(id, type);
-        }
-      });
-    }
-    
-    // Bölüm butonları (dizi/anime içerikleri için)
-    const episodeButtons = card.querySelectorAll('.episode-button');
-    episodeButtons.forEach(button => {
-      button.addEventListener('click', async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
+        // Kart bilgilerini al
+        const cardId = card.dataset.id;
+        const cardType = card.dataset.type;
+        const cardTitle = card.querySelector('.card-title').textContent;
+        const posterUrl = card.querySelector('.card-poster').style.backgroundImage;
         
-        const id = card.dataset.id;
-        const type = card.dataset.type;
-        const seasonNumber = button.dataset.season;
-        const episodeNumber = button.dataset.episode;
+        // Popup içeriğini oluştur
+        createCardPopup(cardId, cardType, cardTitle, posterUrl, card);
         
-        // Bölüm izlendi/izlenmedi olarak işaretle
-        button.classList.toggle('watched');
-        const isWatched = button.classList.contains('watched');
+        // Popup ve overlay'i göster
+        overlay.style.display = 'block';
+        popup.style.display = 'block';
         
-        console.log(`Bölüm ${isWatched ? 'izlendi' : 'izlenmedi'} olarak işaretlendi: ${type} ${id}, Sezon ${seasonNumber}, Bölüm ${episodeNumber}`);
-        
-        // Sezon ilerleme durumunu güncelle
-        updateSeasonProgress(card, seasonNumber);
-        
-        // Genel ilerleme durumunu güncelle
-        updateOverallProgress(card);
-        
-        // Sunucuya kaydet (gerçek uygulamada)
-        // await updateEpisodeStatus(id, type, seasonNumber, episodeNumber, isWatched);
-      });
-    });
-    
-    // İzlendi olarak işaretle butonu (film içerikleri için)
-    const watchedButton = card.querySelector('.card-action-secondary-button');
-    if (watchedButton) {
-      watchedButton.addEventListener('click', async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        const id = card.dataset.id;
-        const type = card.dataset.type;
-        const newStatus = watchedButton.dataset.status;
-        
-        console.log(`İçerik durumu değiştiriliyor: ${id}, ${type}, yeni durum: ${newStatus}`);
-        
-        try {
-          // IPC ile ana sürece bildir
-          const result = await window.ipcRenderer.invoke('update-content-status', id, type, newStatus);
-          
-          if (result) {
-            console.log('İçerik durumu başarıyla güncellendi');
-            
-            // İzleme listesini güncelle
-            await loadWatchlist();
-          } else {
-            console.error('İçerik durumu güncellenemedi');
-          }
-        } catch (error) {
-          console.error('Durum güncelleme hatası:', error);
-        }
+        console.log(`Kart popup olarak açıldı: ${cardId}, ${cardType}`);
       });
     }
   });
 }
 
-// Sezon ilerleme durumunu güncelle
-function updateSeasonProgress(card, seasonNumber) {
-  const seasonItem = card.querySelector(`.season-item:nth-child(${seasonNumber})`);
-  if (!seasonItem) return;
+// Popup içeriğini oluştur
+function createCardPopup(id, type, title, posterUrl, originalCard) {
+  const popup = document.querySelector('.card-popup');
+  if (!popup) return;
   
-  const episodeButtons = seasonItem.querySelectorAll('.episode-button');
-  const totalEpisodes = episodeButtons.length;
-  const watchedEpisodes = seasonItem.querySelectorAll('.episode-button.watched').length;
+  // Kart türüne göre farklı içerik
+  const hasSeasons = type === 'series' || type === 'anime';
   
-  // İlerleme metnini güncelle
-  const progressText = seasonItem.querySelector('.season-progress');
-  if (progressText) {
-    progressText.textContent = `${watchedEpisodes}/${totalEpisodes}`;
+  // İzleme ilerlemesi bilgilerini al
+  let progress = 0;
+  let watchedEpisodes = 0;
+  let totalEpisodes = 0;
+  let seasons = [];
+  
+  // Orijinal karttan sezon bilgilerini al
+  if (hasSeasons) {
+    const progressElement = originalCard.querySelector('.progress-text');
+    if (progressElement) {
+      const progressMatch = progressElement.textContent.match(/(\d+)%\s+tamamlandı\s+\((\d+)\/(\d+)/);
+      if (progressMatch && progressMatch.length >= 4) {
+        progress = parseInt(progressMatch[1], 10);
+        watchedEpisodes = parseInt(progressMatch[2], 10);
+        totalEpisodes = parseInt(progressMatch[3], 10);
+      }
+    }
+    
+    // Sezon bilgilerini al
+    const seasonItems = originalCard.querySelectorAll('.season-item');
+    seasonItems.forEach(seasonItem => {
+      const seasonTitle = seasonItem.querySelector('.season-title').textContent;
+      const seasonProgressText = seasonItem.querySelector('.season-progress').textContent;
+      const [watched, total] = seasonProgressText.split('/').map(num => parseInt(num.trim(), 10));
+      
+      const seasonNumber = parseInt(seasonTitle.replace('Sezon ', ''), 10);
+      
+      // Bölüm butonlarının izlenme durumlarını al
+      const episodeButtons = seasonItem.querySelectorAll('.episode-button');
+      const episodes = Array.from(episodeButtons).map(button => {
+        return {
+          number: parseInt(button.textContent.trim(), 10),
+          isWatched: button.classList.contains('watched')
+        };
+      });
+      
+      seasons.push({
+        number: seasonNumber,
+        title: seasonTitle,
+        watchedCount: watched,
+        totalCount: total,
+        episodes: episodes
+      });
+    });
   }
+  
+  // HTML içeriğini oluştur
+  let popupHTML = `
+    <div class="popup-content">
+      <div class="popup-header">
+        <h2 class="popup-title">${title}</h2>
+        <button class="popup-close">×</button>
+      </div>
+  `;
+  
+  if (hasSeasons) {
+    // İlerleme durumu
+    popupHTML += `
+      <div class="popup-progress">
+        <div class="popup-progress-bar">
+          <div class="popup-progress-value" style="width: ${progress}%"></div>
+        </div>
+        <div class="popup-progress-text">${progress}% tamamlandı (${watchedEpisodes}/${totalEpisodes} bölüm)</div>
+      </div>
+    `;
+    
+    // Sezonlar ve bölümler
+    seasons.forEach(season => {
+      popupHTML += `
+        <div class="popup-season">
+          <div class="popup-season-title">
+            ${season.title}
+            <span class="popup-season-count">${season.watchedCount}/${season.totalCount}</span>
+          </div>
+          <div class="popup-episodes">
+      `;
+      
+      // Bölüm butonları
+      for (let i = 0; i < season.totalCount; i++) {
+        const episodeNum = i + 1;
+        const episode = season.episodes.find(ep => ep.number === episodeNum);
+        const isWatched = episode ? episode.isWatched : false;
+        
+        popupHTML += `
+          <button class="popup-episode ${isWatched ? 'watched' : ''}" 
+            data-season="${season.number}" 
+            data-episode="${episodeNum}">
+            ${episodeNum}
+          </button>
+        `;
+      }
+      
+      popupHTML += `
+          </div>
+        </div>
+      `;
+    });
+  } else {
+    // Film içerikleri için detay bilgileri
+    popupHTML += `
+      <div class="popup-details">
+        <p><strong>Tür:</strong> ${type === 'movie' ? 'Film' : type === 'series' ? 'Dizi' : 'Anime'}</p>
+        <p><strong>Durum:</strong> <span class="popup-status-text">${originalCard.querySelector('.card-status-badge .status-text').textContent}</span></p>
+      </div>
+    `;
+  }
+  
+  // Aksiyon butonları
+  popupHTML += `
+    <div class="popup-actions">
+      <button class="popup-action-button popup-remove-button" data-id="${id}" data-type="${type}">Kaldır</button>
+    </div>
+    
+    <button class="popup-status" data-id="${id}" data-type="${type}" data-status="watched">
+      ${originalCard.querySelector('.card-status-badge .status-text').textContent === 'İzlendi' ? 'İzlendi ✓' : 'İzlendi Olarak İşaretle'}
+    </button>
+  </div>`;
+  
+  // İçeriği popup'a ekle
+  popup.innerHTML = popupHTML;
+  
+  // Event listener'ları ekle
+  setupPopupEventListeners(popup, id, type, originalCard);
 }
 
-// Genel ilerleme durumunu güncelle
-function updateOverallProgress(card) {
+// Popup için event listener'ları ekle
+function setupPopupEventListeners(popup, id, type, originalCard) {
+  // Kapat butonu
+  const closeButton = popup.querySelector('.popup-close');
+  if (closeButton) {
+    closeButton.addEventListener('click', () => {
+      // Overlay ve popup'ı gizle
+      const overlay = document.querySelector('.card-overlay');
+      
+      if (overlay) overlay.style.display = 'none';
+      popup.style.display = 'none';
+    });
+  }
+  
+  // Kaldır butonu
+  const removeButton = popup.querySelector('.popup-remove-button');
+  if (removeButton) {
+    removeButton.addEventListener('click', async () => {
+      if (confirm('Bu içeriği izleme listenizden kaldırmak istediğinizden emin misiniz?')) {
+        // Popup'ı kapat
+        const overlay = document.querySelector('.card-overlay');
+        if (overlay) overlay.style.display = 'none';
+        popup.style.display = 'none';
+        
+        try {
+          console.log('İçerik kaldırılıyor...');
+          
+          // İşlemden önce mevcut aktif sayfa adını kaydet
+          const tempActivePageName = currentActivePage;
+          console.log(`İşlem öncesi aktif sayfa: ${tempActivePageName}`);
+          
+          // Sayfa bilgisini localStorage'a kaydet (yenileme durumu için)
+          localStorage.setItem('lastActivePage', tempActivePageName);
+          
+          // İçeriği kaldır
+          const result = await window.ipcRenderer.invoke('remove-from-watchlist', id, type);
+          
+          if (result) {
+            console.log('İçerik başarıyla kaldırıldı');
+            
+            // İzleme listesi verilerini güncelle
+            watchlistData = await window.ipcRenderer.invoke('get-watchlist');
+            
+            // Sayfa içeriğini güncelle
+            generatePageContents();
+            
+            // Aktif sayfayı korumak için, değişken içindeki sayfaya geri dön
+            console.log(`İşlem sonrası aktif sayfa ayarlanıyor: ${tempActivePageName}`);
+            currentActivePage = tempActivePageName;
+            updateActiveTabIndicators();
+            renderCurrentPage();
+          } else {
+            console.error('İçerik kaldırılamadı');
+          }
+        } catch (error) {
+          console.error('İçerik kaldırma hatası:', error);
+        }
+      }
+    });
+  }
+  
+  // İzleme durumu butonu
+  const statusButton = popup.querySelector('.popup-status');
+  if (statusButton) {
+    statusButton.addEventListener('click', async () => {
+      const newStatus = statusButton.dataset.status;
+      
+      try {
+        console.log(`İçerik durumu değiştiriliyor: ${newStatus}`);
+        
+        // İşlemden önce mevcut aktif sayfa adını kaydet
+        const tempActivePageName = currentActivePage;
+        console.log(`İşlem öncesi aktif sayfa: ${tempActivePageName}`);
+        
+        // Sayfa bilgisini localStorage'a kaydet (yenileme durumu için)
+        localStorage.setItem('lastActivePage', tempActivePageName);
+        
+        // IPC ile ana sürece bildir
+        const result = await window.ipcRenderer.invoke('update-content-status', id, type, newStatus);
+        
+        if (result) {
+          console.log('İçerik durumu başarıyla güncellendi');
+          
+          // Overlay ve popup'ı kapat
+          const overlay = document.querySelector('.card-overlay');
+          if (overlay) overlay.style.display = 'none';
+          popup.style.display = 'none';
+          
+          // İzleme listesi verilerini güncelle
+          watchlistData = await window.ipcRenderer.invoke('get-watchlist');
+          
+          // Sayfa içeriğini güncelle
+          generatePageContents();
+          
+          // Aktif sayfayı korumak için, değişken içindeki sayfaya geri dön
+          console.log(`İşlem sonrası aktif sayfa ayarlanıyor: ${tempActivePageName}`);
+          currentActivePage = tempActivePageName;
+          updateActiveTabIndicators();
+          renderCurrentPage();
+        } else {
+          console.error('İçerik durumu güncellenemedi');
+        }
+      } catch (error) {
+        console.error('Durum güncelleme hatası:', error);
+      }
+    });
+  }
+  
+  // Bölüm butonları
+  const episodeButtons = popup.querySelectorAll('.popup-episode');
+  episodeButtons.forEach(button => {
+    button.addEventListener('click', async () => {
+      const seasonNumber = button.dataset.season;
+      const episodeNumber = button.dataset.episode;
+      
+      // Bölüm izlendi/izlenmedi olarak işaretle
+      button.classList.toggle('watched');
+      const isWatched = button.classList.contains('watched');
+      
+      console.log(`Bölüm ${isWatched ? 'izlendi' : 'izlenmedi'} olarak işaretlendi: ${type} ${id}, Sezon ${seasonNumber}, Bölüm ${episodeNumber}`);
+      
+      // Aynı sezondan tüm bölümleri bul
+      const seasonButtons = Array.from(popup.querySelectorAll(`.popup-episode[data-season="${seasonNumber}"]`));
+      const totalEpisodes = seasonButtons.length;
+      const watchedEpisodes = seasonButtons.filter(btn => btn.classList.contains('watched')).length;
+      
+      // Sezon başlığını güncelle
+      const seasonTitle = popup.querySelector(`.popup-season-title:nth-of-type(${seasonNumber})`);
+      if (seasonTitle) {
+        const seasonCountElement = seasonTitle.querySelector('.popup-season-count');
+        if (seasonCountElement) {
+          seasonCountElement.textContent = `${watchedEpisodes}/${totalEpisodes}`;
+        }
+      }
+      
+      // Genel ilerleme durumunu güncelle
+      updatePopupProgress(popup);
+      
+      // Ayrıca orijinal kartı da güncelle
+      const originalButton = originalCard.querySelector(`.episode-button[data-season="${seasonNumber}"][data-episode="${episodeNumber}"]`);
+      if (originalButton) {
+        if (isWatched) {
+          originalButton.classList.add('watched');
+        } else {
+          originalButton.classList.remove('watched');
+        }
+        
+        // Orijinal karttaki ilerleme durumunu da güncelle
+        updateSeasonProgress(originalCard, seasonNumber);
+        updateOverallProgress(originalCard);
+      }
+    });
+  });
+}
+
+// Popup ilerleme durumunu güncelle
+function updatePopupProgress(popup) {
   // Tüm bölümleri say
-  const allEpisodes = card.querySelectorAll('.episode-button');
+  const allEpisodes = popup.querySelectorAll('.popup-episode');
   const totalEpisodes = allEpisodes.length;
-  const watchedEpisodes = card.querySelectorAll('.episode-button.watched').length;
+  const watchedEpisodes = popup.querySelectorAll('.popup-episode.watched').length;
   
   // İlerleme yüzdesini hesapla
   const progress = totalEpisodes > 0 ? Math.round((watchedEpisodes / totalEpisodes) * 100) : 0;
   
   // İlerleme çubuğunu güncelle
-  const progressBar = card.querySelector('.progress-value');
+  const progressBar = popup.querySelector('.popup-progress-value');
   if (progressBar) {
     progressBar.style.width = `${progress}%`;
   }
   
   // İlerleme metnini güncelle
-  const progressText = card.querySelector('.progress-text');
+  const progressText = popup.querySelector('.popup-progress-text');
   if (progressText) {
     progressText.textContent = `${progress}% tamamlandı (${watchedEpisodes}/${totalEpisodes} bölüm)`;
   }
 }
 
 // İzleme listesinden içerik kaldır
-async function removeFromWatchlist(id, type) {
+async function removeFromWatchlist(id, type, activePage = null) {
   try {
     console.log(`İzleme listesinden kaldırılıyor: ${id}, ${type}`);
     
@@ -554,8 +808,11 @@ async function removeFromWatchlist(id, type) {
     if (result) {
       console.log('İçerik başarıyla kaldırıldı');
       
-      // İzleme listesini güncelle
+      // İzleme listesini güncelle ve aktivePage'e dön
       await loadWatchlist();
+      if (activePage) {
+        renderCurrentPage();
+      }
     } else {
       console.error('İçerik kaldırılamadı');
     }
@@ -768,6 +1025,9 @@ function setupAddButton() {
   console.log('Add button setup:', addButton);
   
   if (addButton) {
+    // Butonun içinde Yeni İçerik Ekle yazsın
+    addButton.innerHTML = 'Ekle';
+    
     addButton.addEventListener('click', () => {
       console.log('Yeni ekle butonuna tıklandı');
       
@@ -781,12 +1041,20 @@ function setupAddButton() {
           <h2>Yeni İçerik Ekle</h2>
           <div class="form-group">
             <input type="text" class="search-input" placeholder="Film, Dizi veya Anime Ara...">
-            <select class="search-type-select">
-              <option value="all">Tümü</option>
-              <option value="movie">Film</option>
-              <option value="series">Dizi</option>
-              <option value="anime">Anime</option>
-            </select>
+            <div class="content-type-radio">
+              <label class="radio-container">
+                <input type="radio" name="searchType" value="movie" checked>
+                <span class="radio-label">Film</span>
+              </label>
+              <label class="radio-container">
+                <input type="radio" name="searchType" value="series">
+                <span class="radio-label">Dizi</span>
+              </label>
+              <label class="radio-container">
+                <input type="radio" name="searchType" value="anime">
+                <span class="radio-label">Anime</span>
+              </label>
+            </div>
             <button class="search-button">Ara</button>
           </div>
           <div class="search-results"></div>
@@ -841,7 +1109,8 @@ function setupAddButton() {
 // Arama işlemini gerçekleştir
 async function performSearch(modal) {
   const searchInput = modal.querySelector('.search-input');
-  const searchType = modal.querySelector('.search-type-select').value;
+  const searchTypeRadio = modal.querySelector('input[name="searchType"]:checked');
+  const searchType = searchTypeRadio ? searchTypeRadio.value : 'movie';
   const resultsContainer = modal.querySelector('.search-results');
   
   const searchTerm = searchInput.value.trim();
@@ -1012,18 +1281,42 @@ function displaySearchResults(container, searchTerm, results) {
       button.textContent = 'Ekleniyor...';
       
       try {
-        // İzleme listesine ekle
-        const success = await addToWatchlist(id, type, title, status, posterUrl);
+        console.log(`İçerik ekleniyor: ${title}, tür: ${type}, durum: ${status}`);
         
-        if (success) {
+        // İşlemden önce mevcut aktif sayfa adını kaydet
+        const tempActivePageName = currentActivePage;
+        console.log(`İşlem öncesi aktif sayfa: ${tempActivePageName}`);
+        
+        // Sayfa bilgisini localStorage'a kaydet (yenileme durumu için)
+        localStorage.setItem('lastActivePage', tempActivePageName);
+        
+        // İzleme listesine ekle
+        const result = await window.ipcRenderer.invoke('add-to-watchlist', {
+          id,
+          type,
+          title,
+          status,
+          poster: posterUrl,
+          addedAt: new Date().toISOString()
+        });
+        
+        if (result) {
           button.textContent = 'Eklendi ✓';
           button.classList.add('success');
           console.log(`"${title}" izleme listenize eklendi (Durum: ${status})`);
           
-          // İzleme listesini yeniden yükle ve arayüzü güncelle
-          await loadWatchlist();
+          // İzleme listesi verilerini güncelle
+          watchlistData = await window.ipcRenderer.invoke('get-watchlist');
           
-          // Popup'ı kapatmak yerine butonun stilini değiştiriyoruz
+          // Sayfa içeriğini güncelle
+          generatePageContents();
+          
+          // Aktif sayfayı korumak için, değişken içindeki sayfaya geri dön
+          console.log(`İşlem sonrası aktif sayfa ayarlanıyor: ${tempActivePageName}`);
+          currentActivePage = tempActivePageName;
+          updateActiveTabIndicators();
+          renderCurrentPage();
+          
           // 3 saniye sonra butonun normal durumuna dönmesini sağlayalım
           setTimeout(() => {
             button.textContent = 'Ekle';
@@ -1043,54 +1336,16 @@ function displaySearchResults(container, searchTerm, results) {
   });
 }
 
-// İzleme listesine içerik ekle (JSON dosyasına yaz)
-async function addToWatchlist(id, type, title, status, poster) {
-  try {
-    console.log(`İzleme listesine ekleniyor: ${title}, durum: ${status}`);
-    
-    // JSON dosyasına yazmak için IPC kullan
-    const result = await window.ipcRenderer.invoke('add-to-watchlist', {
-      id,
-      type,
-      title,
-      status,
-      poster,
-      addedAt: new Date().toISOString()
-    });
-    
-    return result;
-  } catch (error) {
-    console.error('Listeye ekleme hatası:', error);
-    return false;
-  }
-}
-
 // Navbar navigasyonu
 function setupNavigation() {
   const navItems = document.querySelectorAll('.navbar-item');
-  const mainContent = document.querySelector('.main-content');
   
   navItems.forEach(item => {
     item.addEventListener('click', () => {
-      // Aktif sınıfını kaldır
-      navItems.forEach(nav => nav.classList.remove('active'));
-      
-      // Tıklanan öğeye aktif sınıfı ekle
-      item.classList.add('active');
-      
-      console.log(`Menü seçildi: ${item.textContent}`);
-      
-      // Sayfa içeriğini güncelle
       const pageName = item.textContent;
       if (pageContents[pageName]) {
-        mainContent.innerHTML = pageContents[pageName];
-        console.log(`${pageName} içeriği yüklendi`);
-        
-        // Slider butonları için event listener'ları yeniden ekle
-        setupSliderNavigation();
-        
-        // İçerik kartları için event listener'ları ekle
-        setupContentCardEvents();
+        // Global değişkeni güncelle ve sayfayı değiştir
+        changePage(pageName);
       } else {
         console.log(`${pageName} için içerik bulunamadı`);
       }
@@ -1282,4 +1537,10 @@ function setupSearch() {
       }
     });
   }
+}
+
+// Şu anki açık sayfayı al
+function getCurrentPage() {
+  const activeNavItem = document.querySelector('.navbar-item.active');
+  return activeNavItem ? activeNavItem.textContent : 'Anasayfa';
 } 

@@ -1,13 +1,39 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const Store = require('electron-store');
+
+// Electron Store şeması ekleyelim
+const storeSchema = {
+  settings: {
+    type: 'object',
+    properties: {
+      theme: { type: 'string', enum: ['dark', 'light'] },
+      notifications: { type: 'boolean' },
+      autoUpdate: { type: 'boolean' },
+      language: { type: 'string', enum: ['tr', 'en'] }
+    }
+  },
+  watchlist: {
+    type: 'object',
+    properties: {
+      anime: { type: 'array', items: { type: 'object' } },
+      movie: { type: 'array', items: { type: 'object' } },
+      series: { type: 'array', items: { type: 'object' } }
+    }
+  },
+  watchHistory: {
+    type: 'array',
+    items: { type: 'object' }
+  }
+};
 
 // Veri deposu oluştur
 const store = new Store({
   name: 'nexttowatch-data', // Depo adı
   fileExtension: 'json', // Dosya uzantısı
   clearInvalidConfig: true, // Geçersiz yapılandırmayı temizle
+  schema: storeSchema // Şema ekle
 });
 
 // Varsayılan uygulama ayarları
@@ -36,26 +62,37 @@ let mainWindow;
 
 function createWindow() {
   try {
-    // Ana pencereyi oluştur
+    // Ana pencereyi oluştur - bildirim tarzı görünüm için
     mainWindow = new BrowserWindow({
-      width: 1200,
-      height: 800,
-      minWidth: 800,
-      minHeight: 600,
-      backgroundColor: '#1E1E2E', // plan.txt'de belirtilen Gece Siyahı renk
+      width: 350,
+      height: 600,
+      minWidth: 300,
+      minHeight: 400,
+      backgroundColor: '#1E1E2E',
+      frame: false, // Çerçeveyi kaldır (başlık çubuğu olmayacak)
+      transparent: true, // Saydam arka plan
+      resizable: true, // Boyutlandırılabilir
+      alwaysOnTop: false, // Her zaman üstte olma özelliği
+      skipTaskbar: false, // Görev çubuğunda gösterme seçeneği
       webPreferences: {
-        nodeIntegration: false, // Node.js entegrasyonu kapalı (güvenlik için)
-        contextIsolation: true, // İçerik izolasyonu açık (güvenlik için)
-        preload: path.join(__dirname, 'preload.js'), // Preload script
-        sandbox: false // Sandbox'ı devre dışı bırak
+        nodeIntegration: false,
+        contextIsolation: true,
+        preload: path.join(__dirname, 'preload.js'),
+        sandbox: false
       }
     });
+
+    // Pencereyi ekranın sağ alt köşesine yerleştir
+    const { width, height } = require('electron').screen.getPrimaryDisplay().workAreaSize;
+    mainWindow.setPosition(width - 370, height - 620);
 
     // index.html dosyasını yükle
     mainWindow.loadFile('index.html');
 
     // Geliştirici araçları (Dev modunda aç)
-    mainWindow.webContents.openDevTools();
+    if (process.argv.includes('--dev')) {
+      mainWindow.webContents.openDevTools({ mode: 'detach' }); // Ayrı pencerede aç
+    }
 
     // Harici linkleri tarayıcıda aç
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -72,37 +109,144 @@ function createWindow() {
     initializeAppData();
   } catch (error) {
     console.error('Pencere oluşturma hatası:', error);
+    dialog.showErrorBox('Uygulama Hatası', `Pencere oluşturulurken bir hata oluştu: ${error.message}`);
+  }
+}
+
+// Veri dosya yollarını belirle
+function getDataPaths() {
+  const userDataPath = app.getPath('userData');
+  const dataDirPath = path.join(userDataPath, 'data');
+  const watchlistPath = path.join(dataDirPath, 'watchlist.json');
+  
+  return {
+    userDataPath,
+    dataDirPath,
+    watchlistPath
+  };
+}
+
+// Veri dizinini oluştur
+function ensureDataDirectory() {
+  const { dataDirPath } = getDataPaths();
+  
+  if (!fs.existsSync(dataDirPath)) {
+    try {
+      fs.mkdirSync(dataDirPath, { recursive: true });
+      console.log('Veri dizini oluşturuldu:', dataDirPath);
+      return true;
+    } catch (error) {
+      console.error('Veri dizini oluşturulurken hata:', error.message);
+      return false;
+    }
+  }
+  
+  return true;
+}
+
+// JSON dosyasını güvenli şekilde okur
+function safeReadJsonFile(filePath, defaultValue = null) {
+  try {
+    if (fs.existsSync(filePath)) {
+      const data = fs.readFileSync(filePath, 'utf8');
+      return JSON.parse(data);
+    }
+  } catch (error) {
+    console.error(`JSON dosyası okunamadı (${filePath}):`, error.message);
+  }
+  
+  return defaultValue;
+}
+
+// JSON dosyasını güvenli şekilde yazar
+function safeWriteJsonFile(filePath, data) {
+  try {
+    const jsonData = JSON.stringify(data, null, 2);
+    fs.writeFileSync(filePath, jsonData, 'utf8');
+    return true;
+  } catch (error) {
+    console.error(`JSON dosyası yazılamadı (${filePath}):`, error.message);
+    return false;
   }
 }
 
 // Uygulama verilerini başlat
 function initializeAppData() {
-  // Ayarları kontrol et ve varsayılanları kaydet
-  const settings = store.get('settings');
-  if (!settings) {
-    store.set('settings', defaultSettings);
+  try {
+    // Ayarları kontrol et ve varsayılanları kaydet
+    const settings = store.get('settings');
+    if (!settings) {
+      store.set('settings', defaultSettings);
+      console.log('Varsayılan ayarlar kaydedildi');
+    }
+    
+    // İzleme listesi için veri yapılarını kontrol et
+    if (!store.has('watchlist')) {
+      store.set('watchlist', {
+        anime: [],
+        movie: [],
+        series: []
+      });
+      console.log('İzleme listesi şeması oluşturuldu');
+    }
+    
+    // İzleme günlüğü için veri yapısını kontrol et
+    if (!store.has('watchHistory')) {
+      store.set('watchHistory', []);
+      console.log('İzleme günlüğü şeması oluşturuldu');
+    }
+    
+    // Veri dizinini oluştur
+    ensureDataDirectory();
+    
+    // Veri dizinindeki dosyaları electron-store ile senkronize et
+    syncDataFiles();
+    
+    console.log('Uygulama verileri başarıyla başlatıldı');
+  } catch (error) {
+    console.error('Uygulama verileri başlatılırken hata:', error.message);
   }
-  
-  // İzleme listesi için veri yapılarını kontrol et
-  if (!store.has('watchlist')) {
-    store.set('watchlist', {
-      anime: [],
-      movie: [],
-      series: []
-    });
-  }
-  
-  // İzleme günlüğü için veri yapısını kontrol et
-  if (!store.has('watchHistory')) {
-    store.set('watchHistory', []);
-  }
-  
-  // Uygulama veri dizinini kontrol et ve oluştur
-  const userDataPath = app.getPath('userData');
-  const dataDirPath = path.join(userDataPath, 'data');
-  
-  if (!fs.existsSync(dataDirPath)) {
-    fs.mkdirSync(dataDirPath, { recursive: true });
+}
+
+// Dosya sistemi ile electron-store arasında veri senkronizasyonunu yapar
+function syncDataFiles() {
+  try {
+    const { watchlistPath } = getDataPaths();
+    
+    // electron-store verilerini dosya sistemindeki JSON dosyasıyla senkronize et
+    const storeWatchlist = store.get('watchlist');
+    
+    // Dosya sistemindeki izleme listesini oku
+    const fileWatchlist = safeReadJsonFile(watchlistPath, null);
+    
+    if (fileWatchlist) {
+      // Dosya sistemindeki veri daha yeni veya farklı mı?
+      const storeHasData = storeWatchlist && 
+                            (storeWatchlist.anime.length > 0 || 
+                             storeWatchlist.movie.length > 0 || 
+                             storeWatchlist.series.length > 0);
+      
+      // Eğer dosya sisteminde veri varsa ve electron-store'da veri yoksa, dosyadan yükle
+      if (!storeHasData) {
+        console.log('Dosya sisteminden izleme listesi verileri alınıyor');
+        store.set('watchlist', fileWatchlist);
+      } 
+      // Aksi halde electron-store verilerini dosya sistemine yaz
+      else {
+        console.log('Electron-store izleme listesi verileri dosya sistemine yazılıyor');
+        safeWriteJsonFile(watchlistPath, storeWatchlist);
+      }
+    } 
+    // Eğer dosya sisteminde veri yoksa, electron-store verilerini dosyaya yaz
+    else if (storeWatchlist) {
+      console.log('İzleme listesi dosyada bulunamadı, electron-store verisi yazılıyor');
+      safeWriteJsonFile(watchlistPath, storeWatchlist);
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Veri senkronizasyonu sırasında hata:', error.message);
+    return false;
   }
 }
 
@@ -134,42 +278,13 @@ function setupIpcHandlers() {
       if (contentType === 'series' || contentType === 'show') contentType = 'series';
       if (contentType === 'anime') contentType = 'anime';
       
-      // Proje kök dizini yerine app.getPath('userData') kullanmak yerine,
-      // doğrudan proje kök dizinindeki data klasörüne yazalım
-      const dataDirPath = path.join(__dirname, 'data');
-      console.log('Veri dizini yolu:', dataDirPath);
+      // Veri dizinini kontrol et
+      ensureDataDirectory();
       
-      const watchlistPath = path.join(dataDirPath, 'watchlist.json');
-      console.log('İzleme listesi dosya yolu:', watchlistPath);
+      // Önce electron-store'dan watchlist verilerini al
+      let watchlist = store.get('watchlist') || { anime: [], movie: [], series: [] };
       
-      if (!fs.existsSync(dataDirPath)) {
-        console.log('Veri dizini bulunamadı, oluşturuluyor:', dataDirPath);
-        fs.mkdirSync(dataDirPath, { recursive: true });
-        console.log('Veri dizini oluşturuldu');
-      }
-      
-      // JSON dosyasını oku
-      let watchlist = { anime: [], movie: [], series: [] };
-      if (fs.existsSync(watchlistPath)) {
-        try {
-          console.log('Mevcut izleme listesi dosyası okunuyor');
-          const fileContent = fs.readFileSync(watchlistPath, 'utf8');
-          watchlist = JSON.parse(fileContent);
-          console.log('Mevcut izleme listesi yüklendi');
-        } catch (error) {
-          console.error('JSON dosyası okunamadı, yeni dosya oluşturulacak:', error);
-        }
-      } else {
-        console.log('İzleme listesi dosyası bulunamadı, yeni dosya oluşturulacak');
-      }
-      
-      // İzleme listesinde, belirtilen türdeki listede olup olmadığını kontrol et
-      if (!watchlist[contentType]) {
-        console.log(`"${contentType}" türü için liste bulunamadı, oluşturuluyor`);
-        watchlist[contentType] = [];
-      }
-      
-      // Bu ID'ye sahip içerik zaten var mı kontrol et
+      // Listeyi güncelle
       const existingIndex = watchlist[contentType].findIndex(item => item.id === content.id);
       
       if (existingIndex >= 0) {
@@ -193,35 +308,18 @@ function setupIpcHandlers() {
         });
       }
       
-      // Listeyi JSON dosyasına yaz
-      try {
-        const jsonData = JSON.stringify(watchlist, null, 2);
-        console.log('İzleme listesi JSON verisi oluşturuldu, dosyaya yazılıyor');
-        fs.writeFileSync(watchlistPath, jsonData, 'utf8');
-        console.log('İzleme listesi JSON dosyasına yazıldı:', watchlistPath);
-        
-        // Klasör ve dosya izinlerini kontrol et
-        const dirStats = fs.statSync(dataDirPath);
-        console.log('Veri dizini izinleri:', dirStats.mode.toString(8));
-        
-        if (fs.existsSync(watchlistPath)) {
-          const fileStats = fs.statSync(watchlistPath);
-          console.log('JSON dosya izinleri:', fileStats.mode.toString(8));
-          console.log('JSON dosya boyutu:', fileStats.size, 'bayt');
-        } else {
-          console.error('JSON dosyası oluşturuldu ama hala bulunamıyor!');
-        }
-      } catch (writeError) {
-        console.error('JSON dosyası yazılırken hata oluştu:', writeError);
-      }
-      
-      // Ayrıca store'a da ekleyelim (mevcut özelliklerle uyumluluk için)
+      // Electron-store'a kaydet
       store.set('watchlist', watchlist);
       console.log('İzleme listesi electron-store\'a kaydedildi');
       
+      // JSON dosyasına yaz
+      const { watchlistPath } = getDataPaths();
+      safeWriteJsonFile(watchlistPath, watchlist);
+      console.log('İzleme listesi JSON dosyasına yazıldı:', watchlistPath);
+      
       return true;
     } catch (error) {
-      console.error('İzleme listesine ekleme hatası:', error);
+      console.error('İzleme listesine ekleme hatası:', error.message);
       return false;
     }
   });
@@ -229,64 +327,57 @@ function setupIpcHandlers() {
   // İzleme listesinden içerik kaldır
   ipcMain.handle('remove-from-watchlist', (event, contentId, type) => {
     try {
-      const watchlist = store.get('watchlist');
-      
       // İçerik türünü belirle
       let contentType = type || 'movie';
       if (contentType === 'series' || contentType === 'show') contentType = 'series';
       if (contentType === 'anime') contentType = 'anime';
+      
+      // Electron-store'dan verileri al
+      const watchlist = store.get('watchlist');
       
       // ID'ye göre içeriği filtrele (kaldır)
       watchlist[contentType] = watchlist[contentType].filter(item => item.id !== contentId);
       
       // Güncellenmiş listeyi kaydet
       store.set('watchlist', watchlist);
+      console.log(`"${contentId}" ID'li ${contentType} içeriği izleme listesinden kaldırıldı`);
       
-      // Proje kök dizinindeki JSON dosyasına da yaz
-      const dataDirPath = path.join(__dirname, 'data');
-      const watchlistPath = path.join(dataDirPath, 'watchlist.json');
-      
-      if (fs.existsSync(dataDirPath)) {
-        fs.writeFileSync(watchlistPath, JSON.stringify(watchlist, null, 2), 'utf8');
-        console.log('İzleme listesi JSON dosyasına yazıldı:', watchlistPath);
-      }
+      // JSON dosyasına yaz
+      const { watchlistPath } = getDataPaths();
+      safeWriteJsonFile(watchlistPath, watchlist);
       
       return true;
     } catch (error) {
-      console.error('İzleme listesinden kaldırma hatası:', error);
+      console.error('İzleme listesinden kaldırma hatası:', error.message);
       return false;
     }
   });
   
   // İzleme listesini getir
   ipcMain.handle('get-watchlist', () => {
-    // Önce proje kök dizinindeki JSON dosyasından okumayı dene
-    const dataDirPath = path.join(__dirname, 'data');
-    const watchlistPath = path.join(dataDirPath, 'watchlist.json');
-    
-    if (fs.existsSync(watchlistPath)) {
-      try {
-        const fileContent = fs.readFileSync(watchlistPath, 'utf8');
-        const watchlist = JSON.parse(fileContent);
-        return watchlist || { anime: [], movie: [], series: [] };
-      } catch (error) {
-        console.error('JSON dosyası okunamadı:', error);
-      }
+    try {
+      // Önce dosya sistemi ile senkronize et
+      syncDataFiles();
+      
+      // Electron-store'dan izleme listesini al
+      const watchlist = store.get('watchlist') || { anime: [], movie: [], series: [] };
+      return watchlist;
+    } catch (error) {
+      console.error('İzleme listesi alma hatası:', error.message);
+      return { anime: [], movie: [], series: [] };
     }
-    
-    // Eğer proje dizininde yoksa veya okuma hatası olduysa, store'dan al
-    return store.get('watchlist') || { anime: [], movie: [], series: [] };
   });
   
   // İçerik durumunu güncelle
   ipcMain.handle('update-content-status', (event, contentId, type, status) => {
     try {
-      const watchlist = store.get('watchlist');
-      
       // İçerik türünü belirle
       let contentType = type || 'movie';
       if (contentType === 'series' || contentType === 'show') contentType = 'series';
       if (contentType === 'anime') contentType = 'anime';
+      
+      // Electron-store'dan verileri al
+      const watchlist = store.get('watchlist');
       
       // İçeriği bul
       const contentIndex = watchlist[contentType].findIndex(item => item.id === contentId);
@@ -314,22 +405,79 @@ function setupIpcHandlers() {
         
         // Güncellenmiş listeyi kaydet
         store.set('watchlist', watchlist);
+        console.log(`"${contentId}" ID'li ${contentType} içeriğinin durumu "${status}" olarak güncellendi`);
         
-        // Proje kök dizinindeki JSON dosyasına da yaz
-        const dataDirPath = path.join(__dirname, 'data');
-        const watchlistPath = path.join(dataDirPath, 'watchlist.json');
-        
-        if (fs.existsSync(dataDirPath)) {
-          fs.writeFileSync(watchlistPath, JSON.stringify(watchlist, null, 2), 'utf8');
-          console.log('İzleme listesi JSON dosyasına yazıldı:', watchlistPath);
-        }
+        // JSON dosyasına yaz
+        const { watchlistPath } = getDataPaths();
+        safeWriteJsonFile(watchlistPath, watchlist);
         
         return true;
       }
       
       return false;
     } catch (error) {
-      console.error('İçerik durumu güncelleme hatası:', error);
+      console.error('İçerik durumu güncelleme hatası:', error.message);
+      return false;
+    }
+  });
+  
+  // İçerik ilerleme durumunu güncelle - yeni eklenen özellik
+  ipcMain.handle('update-content-progress', (event, contentId, type, progress, totalEpisodes) => {
+    try {
+      // İçerik türünü belirle
+      let contentType = type || 'movie';
+      if (contentType === 'series' || contentType === 'show') contentType = 'series';
+      if (contentType === 'anime') contentType = 'anime';
+      
+      // Electron-store'dan verileri al
+      const watchlist = store.get('watchlist');
+      
+      // İçeriği bul
+      const contentIndex = watchlist[contentType].findIndex(item => item.id === contentId);
+      
+      if (contentIndex >= 0) {
+        // İçerik bulundu, ilerleme durumunu güncelle
+        const item = watchlist[contentType][contentIndex];
+        
+        item.progress = progress || 0;
+        item.totalEpisodes = totalEpisodes || 0;
+        item.updatedAt = new Date().toISOString();
+        
+        // Eğer ilerleme tamamlandıysa, otomatik olarak durumu "izlendi" olarak işaretle
+        if (progress > 0 && totalEpisodes > 0 && progress >= totalEpisodes) {
+          item.status = 'watched';
+          item.watchedAt = new Date().toISOString();
+          
+          // İzleme geçmişine ekle
+          const watchHistory = store.get('watchHistory') || [];
+          watchHistory.push({
+            id: contentId,
+            type: contentType,
+            title: item.title,
+            watchedAt: new Date().toISOString()
+          });
+          
+          store.set('watchHistory', watchHistory);
+        } 
+        // İzlemeye başlandıysa ama tamamlanmadıysa durumu "izleniyor" olarak işaretle
+        else if (progress > 0) {
+          item.status = 'watching';
+        }
+        
+        // Güncellenmiş listeyi kaydet
+        store.set('watchlist', watchlist);
+        console.log(`"${contentId}" ID'li ${contentType} içeriğinin ilerleme durumu güncellendi: ${progress}/${totalEpisodes}`);
+        
+        // JSON dosyasına yaz
+        const { watchlistPath } = getDataPaths();
+        safeWriteJsonFile(watchlistPath, watchlist);
+        
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('İçerik ilerleme güncelleme hatası:', error.message);
       return false;
     }
   });
@@ -339,11 +487,13 @@ function setupIpcHandlers() {
     // Burada bildirim gösterme işlemi yapılabilir
     console.log('Bildirim:', message);
   });
+  
+  console.log('IPC olay işleyicileri kuruldu');
 }
 
 // Preload dosyasını ayarla ve electron-rebuild ile tekrar derlenmesini sağla
 app.whenReady().then(() => {
-  // API Servislerini hazırla
+  // Uygulama başlat
   try {
     // Uygulama verilerini başlat
     initializeAppData();
@@ -358,12 +508,18 @@ app.whenReady().then(() => {
     app.on('activate', function () {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
+    
+    console.log('Uygulama başarıyla başlatıldı');
   } catch (error) {
-    console.error('Uygulama başlatılırken hata:', error);
+    console.error('Uygulama başlatılırken hata:', error.message);
+    dialog.showErrorBox('Uygulama Hatası', `Uygulama başlatılırken bir hata oluştu: ${error.message}`);
   }
 });
 
 // Uygulama kapatıldığında
 app.on('window-all-closed', function () {
+  // Son bir kez veri senkronizasyonu yap
+  syncDataFiles();
+  
   if (process.platform !== 'darwin') app.quit();
 }); 
