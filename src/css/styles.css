@@ -79,6 +79,8 @@ body {
   gap: 4px;
   -webkit-app-region: no-drag; /* Kontroller sürüklenemez */
   margin-left: 10px;
+  position: relative;
+  z-index: 10; /* Z-index eklenecek */
 }
 
 .window-control {
@@ -175,6 +177,9 @@ body {
   outline: none;
   font-weight: 500;
   white-space: nowrap;
+  -webkit-app-region: no-drag; /* Butonun tıklanabilir olması için */
+  position: relative;
+  z-index: 5; /* Z-index eklenecek */
 }
 
 .add-button:hover {
@@ -1682,17 +1687,6 @@ input:checked + .slider:before {
   display: none !important;
 }
 
-/* Kartın arka yüzü için pointer-events ayarları */
-.content-card.flipped .card-back * {
-  pointer-events: auto !important;
-}
-
-/* Eski flip butonlarını kaldır */
-.flip-button,
-.card-back-flip {
-  display: none !important;
-}
-
 /* Kart arka yüzündeki kapat butonu */
 .card-back-close {
   position: absolute;
@@ -1873,30 +1867,6 @@ input:checked + .slider:before {
   white-space: nowrap;
   letter-spacing: 0.2px;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-}
-
-/* Kart arka yüzündeki kapat butonu */
-.card-back-close {
-  position: absolute;
-  top: 3px;
-  right: 3px;
-  width: 16px;
-  height: 16px;
-  background-color: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 50%;
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  z-index: 10;
-  font-size: 8px;
-  transition: all 0.2s ease;
-}
-
-.card-back-close:hover {
-  background-color: rgba(255, 0, 0, 0.5);
 }
 
 /* Popup içindeki özel stiller */
