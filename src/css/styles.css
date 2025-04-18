@@ -53,9 +53,9 @@ body {
   padding: 8px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   height: 36px;
+  -webkit-app-region: drag; /* Pencereyi sürüklemek için */
 }
 
 /* Logo Tasarımı */
@@ -69,6 +69,55 @@ body {
   letter-spacing: -0.5px;
   flex-shrink: 0;
   white-space: nowrap;
+  margin-right: auto;
+}
+
+/* Pencere Kontrolleri */
+.window-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  -webkit-app-region: no-drag; /* Kontroller sürüklenemez */
+  margin-left: 10px;
+}
+
+.window-control {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 8px;
+  color: rgba(255, 255, 255, 0.8);
+  transition: all 0.2s ease;
+  background-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.window-control:hover {
+  transform: scale(1.1);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
+}
+
+.window-control.minimize {
+  background-color: #ffffff;
+  color: #333;
+}
+
+.window-control.minimize:hover {
+  background-color: #f39c12;
+}
+
+.window-control.close {
+  background-color: #bd1200;
+  color: white;
+}
+
+.window-control.close:hover {
+  background-color: #c0392b;
 }
 
 /* Arama kutusu düzenlemesi */
@@ -78,6 +127,7 @@ body {
   height: 26px;
   max-width: 160px;
   position: relative;
+  -webkit-app-region: no-drag; /* Arama çubuğu sürüklenemez */
 }
 
 .search-bar input {
@@ -1071,20 +1121,21 @@ input:checked + .slider:before {
   top: 70px;
   right: 20px;
   width: 350px;
-  background-color: #1f2333;
+  background-color: var(--background-color);
   border-radius: 8px;
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
   z-index: 100;
   overflow: hidden;
   max-height: 80vh;
   display: flex;
   flex-direction: column;
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .add-panel-header {
-  background-color: #1a1e2c;
+  background-color: rgba(20, 20, 25, 0.8);
   padding: 12px 16px;
-  border-bottom: 1px solid #2a303f;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .add-panel-header h3 {
@@ -1108,16 +1159,16 @@ input:checked + .slider:before {
 #add-search-input {
   width: 100%;
   padding: 10px;
-  border: 1px solid #2a303f;
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 4px;
-  background-color: #282e40;
+  background-color: rgba(30, 30, 35, 0.7);
   color: white;
   font-size: 14px;
 }
 
 #add-search-input:focus {
   outline: none;
-  border-color: #3a6cf3;
+  border-color: var(--accent-color);
 }
 
 .content-type-filters {
@@ -1130,7 +1181,7 @@ input:checked + .slider:before {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #c4c8d3;
+  color: var(--text-color);
   font-size: 14px;
   cursor: pointer;
 }
@@ -1141,17 +1192,19 @@ input:checked + .slider:before {
 
 #add-search-button {
   padding: 10px;
-  background-color: #3a6cf3;
+  background: linear-gradient(135deg, var(--accent-color), #ff6d00);
   color: white;
   border: none;
   border-radius: 4px;
   cursor: pointer;
   font-size: 14px;
-  transition: background-color 0.3s;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 #add-search-button:hover {
-  background-color: #2a56d6;
+  transform: translateY(-2px);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.4);
 }
 
 /* Arama sonuçları stilleri */
@@ -1165,7 +1218,7 @@ input:checked + .slider:before {
   justify-content: center;
   align-items: center;
   height: 100px;
-  color: #8f96a6;
+  color: var(--text-color);
 }
 
 .error-message {
@@ -1177,7 +1230,7 @@ input:checked + .slider:before {
 }
 
 .no-results {
-  color: #8f96a6;
+  color: var(--text-color);
   text-align: center;
   padding: 30px 0;
 }
@@ -1188,7 +1241,7 @@ input:checked + .slider:before {
 
 .search-results-header h4 {
   margin: 0;
-  color: #c4c8d3;
+  color: var(--text-color);
   font-size: 14px;
   font-weight: normal;
 }
@@ -1202,10 +1255,11 @@ input:checked + .slider:before {
 .search-result-card {
   display: flex;
   gap: 12px;
-  background-color: #282e40;
+  background-color: rgba(30, 30, 35, 0.7);
   border-radius: 6px;
   overflow: hidden;
   transition: transform 0.2s, box-shadow 0.2s;
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .search-result-card:hover {
@@ -1218,7 +1272,7 @@ input:checked + .slider:before {
   height: 120px;
   background-size: cover;
   background-position: center;
-  background-color: #1a1e2c;
+  background-color: rgba(15, 15, 18, 0.9);
   flex-shrink: 0;
 }
 
@@ -1241,12 +1295,12 @@ input:checked + .slider:before {
   align-items: center;
   gap: 8px;
   margin-bottom: 12px;
-  color: #8f96a6;
+  color: rgba(255, 255, 255, 0.7);
   font-size: 12px;
 }
 
 .result-type {
-  background-color: #3a6cf3;
+  background-color: var(--accent-color);
   color: white;
   padding: 2px 6px;
   border-radius: 3px;
@@ -1256,23 +1310,27 @@ input:checked + .slider:before {
 .add-to-list-button {
   margin-top: auto;
   padding: 6px 12px;
-  background-color: #3a6cf3;
+  background: linear-gradient(135deg, var(--accent-color), #ff6d00);
   color: white;
   border: none;
   border-radius: 4px;
   cursor: pointer;
   font-size: 12px;
-  transition: background-color 0.3s;
+  transition: all 0.2s ease;
   align-self: flex-start;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 .add-to-list-button:hover {
-  background-color: #2a56d6;
+  transform: translateY(-2px);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.4);
 }
 
 .add-to-list-button:disabled {
-  background-color: #456826;
+  background: linear-gradient(135deg, #456826, #2a4016);
   cursor: default;
+  transform: none;
+  box-shadow: none;
 }
 
 /* Modal Stili */
@@ -1291,7 +1349,7 @@ input:checked + .slider:before {
 }
 
 .add-form {
-  background-color: #2C2C3B;
+  background-color: var(--background-color);
   border-radius: 8px;
   width: 90%;
   max-width: 320px;
@@ -1300,6 +1358,7 @@ input:checked + .slider:before {
   padding: 15px;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
   animation: modalAppear 0.3s ease;
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 @keyframes modalAppear {
@@ -1314,7 +1373,7 @@ input:checked + .slider:before {
 }
 
 .add-form h2 {
-  color: var(--highlight-color);
+  color: var(--accent-color);
   margin-bottom: 15px;
   font-size: 16px;
 }
@@ -1329,8 +1388,8 @@ input:checked + .slider:before {
 .search-input {
   padding: 8px;
   border-radius: 4px;
-  border: 1px solid var(--border-color);
-  background-color: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background-color: rgba(30, 30, 35, 0.7);
   color: var(--text-color);
   font-size: 12px;
   height: 32px;
@@ -1339,8 +1398,8 @@ input:checked + .slider:before {
 .search-type-select {
   padding: 6px;
   border-radius: 4px;
-  border: 1px solid var(--border-color);
-  background-color: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background-color: rgba(30, 30, 35, 0.7);
   color: var(--text-color);
   width: 100%;
   font-size: 12px;
@@ -1348,24 +1407,26 @@ input:checked + .slider:before {
 }
 
 .search-button {
-  background-color: var(--accent-color);
+  background: linear-gradient(135deg, var(--accent-color), #ff6d00);
   color: white;
   border: none;
   border-radius: 4px;
   padding: 8px;
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: all 0.2s ease;
   height: 32px;
   font-size: 12px;
   margin-top: 5px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 .search-button:hover {
-  background-color: #6b4ad7;
+  transform: translateY(-2px);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.4);
 }
 
 .cancel-button {
-  background-color: #666;
+  background-color: rgba(255, 255, 255, 0.1);
   color: white;
   border: none;
   border-radius: 4px;
@@ -1376,7 +1437,7 @@ input:checked + .slider:before {
 }
 
 .cancel-button:hover {
-  background-color: #555;
+  background-color: rgba(255, 255, 255, 0.2);
 }
 
 .modal-actions {
@@ -1971,4 +2032,147 @@ input:checked + .slider:before {
   padding: 20px;
   font-size: 14px;
   background: linear-gradient(135deg, #222222 0%, #121212 100%);
+}
+
+/* API Butonları */
+.api-integrations {
+  margin-top: 1.5rem;
+}
+
+.api-integrations h4 {
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.api-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.api-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-color);
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.api-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.2);
+}
+
+.api-button.github {
+  background-color: #24292e;
+}
+
+.api-button.github:hover {
+  background-color: #2f363d;
+}
+
+.api-button.github i {
+  font-size: 1.2rem;
+}
+
+.api-button.tmdb {
+  background-color: #01d277;
+  color: #081c24;
+}
+
+.api-button.tmdb:hover {
+  background-color: #01c26a;
+}
+
+.tmdb-logo {
+  font-weight: 700;
+  font-size: 1rem;
+  letter-spacing: -0.5px;
+}
+
+/* Yedekleme Seçenekleri */
+.backup-options {
+  margin-top: 1.5rem;
+}
+
+.backup-options h4 {
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.backup-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.backup-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-color);
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.backup-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.2);
+}
+
+.backup-button i {
+  font-size: 1.2rem;
+}
+
+.backup-button.github {
+  background-color: #24292e;
+}
+
+.backup-button.github:hover {
+  background-color: #2f363d;
+}
+
+.backup-button.googledrive {
+  background-color: #0f9d58;
+  color: white;
+}
+
+.backup-button.googledrive:hover {
+  background-color: #0b8043;
+}
+
+.backup-button.local {
+  background-color: #4a6fa5;
+  color: white;
+}
+
+.backup-button.local:hover {
+  background-color: #3a5982;
+}
+
+/* API Buton Güncellemeleri */
+.api-button.omdb {
+  background-color: #e6b91e;
+  color: #121212;
+}
+
+.api-button.omdb:hover {
+  background-color: #d4aa1c;
+}
+
+.omdb-logo {
+  font-weight: 700;
+  font-size: 1rem;
+  letter-spacing: -0.5px;
 } 

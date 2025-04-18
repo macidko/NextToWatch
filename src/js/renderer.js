@@ -18,6 +18,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Diğer kurulumlar
   setupNavigation();
   setupSearch();
+  
+  // Pencere kontrollerini ayarla
+  setupWindowControls();
 });
 
 // İzleme listesi verilerini tutan global değişken
@@ -993,26 +996,40 @@ const pageContents = {
       <h2 class="category-title">Ayarlar</h2>
       <div class="settings-section">
         <div class="settings-item">
-          <h3>Tema</h3>
-          <div class="theme-selector">
-            <button class="theme-button active" data-theme="dark">Karanlık</button>
-            <button class="theme-button" data-theme="light">Aydınlık</button>
-          </div>
-        </div>
-        <div class="settings-item">
-          <h3>Bildirimler</h3>
-          <div class="notification-settings">
-            <label class="switch">
-              <input type="checkbox" checked>
-              <span class="slider round"></span>
-            </label>
-            <span>Bildirimleri Etkinleştir</span>
-          </div>
-        </div>
-        <div class="settings-item">
           <h3>Veri Yönetimi</h3>
           <button class="settings-button">Verileri Dışa Aktar</button>
-          <button class="settings-button">Verileri İçe Aktar</button>
+          
+          <div class="backup-options">
+            <h4>Yedekleme Seçenekleri</h4>
+            <div class="backup-buttons">
+              <button class="backup-button github">
+                <i class="fab fa-github"></i>
+                <span>GitHub</span>
+              </button>
+              <button class="backup-button googledrive">
+                <i class="fab fa-google-drive"></i>
+                <span>Google Drive</span>
+              </button>
+              <button class="backup-button local">
+                <i class="fas fa-folder"></i>
+                <span>Yerel Dizin</span>
+              </button>
+            </div>
+          </div>
+          
+          <div class="api-integrations">
+            <h4>API Entegrasyonları</h4>
+            <div class="api-buttons">
+              <button class="api-button tmdb">
+                <span class="tmdb-logo">TMDB</span>
+                <span>The Movie Database</span>
+              </button>
+              <button class="api-button omdb">
+                <span class="omdb-logo">OMDb</span>
+                <span>Open Movie Database</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1035,31 +1052,31 @@ function setupAddButton() {
       const modal = document.createElement('div');
       modal.className = 'modal';
       
-      // Form içeriği
+      // Form içeriği - Arka planı ve butonları güncelle
       modal.innerHTML = `
-        <div class="add-form">
-          <h2>Yeni İçerik Ekle</h2>
+        <div class="add-form" style="background-color: var(--background-color); border: 1px solid rgba(255, 255, 255, 0.05);">
+          <h2 style="color: var(--accent-color);">Yeni İçerik Ekle</h2>
           <div class="form-group">
-            <input type="text" class="search-input" placeholder="Film, Dizi veya Anime Ara...">
+            <input type="text" class="search-input" placeholder="Film, Dizi veya Anime Ara..." style="background-color: rgba(30, 30, 35, 0.7); border: 1px solid rgba(255, 255, 255, 0.1);">
             <div class="content-type-radio">
-              <label class="radio-container">
+              <label class="radio-container" style="background-color: #4e1f19; border: 1px solid rgba(255, 61, 0, 0.3);">
                 <input type="radio" name="searchType" value="movie" checked>
                 <span class="radio-label">Film</span>
               </label>
-              <label class="radio-container">
+              <label class="radio-container" style="background-color: #1f2942; border: 1px solid rgba(61, 90, 254, 0.3);">
                 <input type="radio" name="searchType" value="series">
                 <span class="radio-label">Dizi</span>
               </label>
-              <label class="radio-container">
+              <label class="radio-container" style="background-color: #421f32; border: 1px solid rgba(233, 30, 99, 0.3);">
                 <input type="radio" name="searchType" value="anime">
                 <span class="radio-label">Anime</span>
               </label>
             </div>
-            <button class="search-button">Ara</button>
+            <button class="search-button" style="background: linear-gradient(135deg, var(--accent-color), #ff6d00); box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);">Ara</button>
           </div>
           <div class="search-results"></div>
           <div class="modal-actions">
-            <button class="cancel-button">İptal</button>
+            <button class="cancel-button" style="background-color: rgba(255, 255, 255, 0.1);">İptal</button>
           </div>
         </div>
       `;
@@ -1102,6 +1119,28 @@ function setupAddButton() {
 
       // Arama inputuna odaklan
       searchInput.focus();
+      
+      // Radio butonları için stil güncellemeleri
+      const radioContainers = modal.querySelectorAll('.radio-container');
+      radioContainers.forEach(container => {
+        const radio = container.querySelector('input[type="radio"]');
+        radio.addEventListener('change', () => {
+          // Tüm radio container'ları için aktif olmayan stil
+          radioContainers.forEach(c => {
+            const r = c.querySelector('input[type="radio"]');
+            if (r.value === 'movie') {
+              c.style.backgroundColor = r.checked ? '#4e1f19' : 'rgba(30, 30, 35, 0.7)';
+              c.style.borderColor = r.checked ? 'rgba(255, 61, 0, 0.6)' : 'rgba(255, 255, 255, 0.1)';
+            } else if (r.value === 'series') {
+              c.style.backgroundColor = r.checked ? '#1f2942' : 'rgba(30, 30, 35, 0.7)';
+              c.style.borderColor = r.checked ? 'rgba(61, 90, 254, 0.6)' : 'rgba(255, 255, 255, 0.1)';
+            } else if (r.value === 'anime') {
+              c.style.backgroundColor = r.checked ? '#421f32' : 'rgba(30, 30, 35, 0.7)';
+              c.style.borderColor = r.checked ? 'rgba(233, 30, 99, 0.6)' : 'rgba(255, 255, 255, 0.1)';
+            }
+          });
+        });
+      });
     });
   }
 }
@@ -1543,4 +1582,24 @@ function setupSearch() {
 function getCurrentPage() {
   const activeNavItem = document.querySelector('.navbar-item.active');
   return activeNavItem ? activeNavItem.textContent : 'Anasayfa';
+}
+
+// renderer.js - DOM yüklendikten sonra çağrılacak
+function setupWindowControls() {
+  const minimizeButton = document.querySelector('.window-control.minimize');
+  const closeButton = document.querySelector('.window-control.close');
+  
+  if (minimizeButton) {
+    minimizeButton.addEventListener('click', () => {
+      console.log('Minimize butonuna tıklandı');
+      window.ipcRenderer.send('window-minimize');
+    });
+  }
+  
+  if (closeButton) {
+    closeButton.addEventListener('click', () => {
+      console.log('Close butonuna tıklandı');
+      window.ipcRenderer.send('window-close');
+    });
+  }
 } 

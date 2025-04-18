@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const Store = require('electron-store');
+const configModule = require('./src/js/config');
 
 // Electron Store şeması ekleyelim
 const storeSchema = {
@@ -60,8 +61,15 @@ const appVersion = require('./package.json').version || '1.0.0';
 
 let mainWindow;
 
-function createWindow() {
+async function createWindow() {
   try {
+    // İlk kurulum kontrolü
+    const isConfigRequired = await configModule.checkConfiguration();
+    
+    if (isConfigRequired) {
+      console.log('İlk kurulum yapılandırması tamamlandı');
+    }
+    
     // Ana pencereyi oluştur - bildirim tarzı görünüm için
     mainWindow = new BrowserWindow({
       width: 350,
@@ -486,6 +494,36 @@ function setupIpcHandlers() {
   ipcMain.on('notify', (event, message) => {
     // Burada bildirim gösterme işlemi yapılabilir
     console.log('Bildirim:', message);
+  });
+  
+  // Pencere minimize olayı
+  ipcMain.on('window-minimize', () => {
+    if (mainWindow) mainWindow.minimize();
+  });
+  
+  // Pencere kapatıldığında
+  ipcMain.on('window-close', () => {
+    if (mainWindow) mainWindow.close();
+  });
+  
+  // Yapılandırma verilerini kaydet
+  ipcMain.handle('save-config', async (event, config) => {
+    try {
+      // Yapılandırma verilerini kaydet
+      configModule.configStore.set('apiKeys', config.apiKeys || {});
+      
+      if (config.backup && config.backup.github) {
+        configModule.configStore.set('backup.github', config.backup.github);
+      }
+      
+      // .env dosyasını oluştur
+      configModule.createEnvFile(config.apiKeys || {});
+      
+      return true;
+    } catch (error) {
+      console.error('Yapılandırma kaydedilirken hata:', error);
+      return false;
+    }
   });
   
   console.log('IPC olay işleyicileri kuruldu');

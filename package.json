@@ -69,7 +69,7 @@
     "pend": "^1.2.0",
     "pkg-up": "^3.1.0",
     "progress": "^2.0.3",
-    "pump": "^3.0.2",
+    "pump": "^3.0.0",
     "quick-lru": "^5.1.1",
     "require-from-string": "^2.0.2",
     "resolve-alpn": "^1.2.1",
@@ -88,15 +88,50 @@
   },
   "devDependencies": {
     "electron": "^35.1.5",
-    "electron-reload": "^2.0.0-alpha.1"
+    "electron-reload": "^2.0.0-alpha.1",
+    "electron-builder": "^24.9.1"
   },
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": ""
+  "description": "",
+  "build": {
+    "appId": "com.nexttowatch.app",
+    "productName": "NextToWatch",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*",
+      "!**/.vscode/*",
+      "!**/.git/*",
+      "!dist/*",
+      "!.env",
+      "!.env.*",
+      "!.gitignore",
+      "!plan.txt",
+      "!README.md"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "license": "LICENSE",
+      "include": "installer.nsh"
+    }
+  }
 }

@@ -69,6 +69,20 @@ try {
       }
       
       return false;
+    },
+    send: (channel, ...args) => {
+      const validChannels = [
+        'window-minimize',
+        'window-close',
+        // Diğer kanallar...
+      ];
+      
+      if (validChannels.includes(channel)) {
+        ipcRenderer.send(channel, ...args);
+        return true;
+      }
+      
+      return false;
     }
   });
 
